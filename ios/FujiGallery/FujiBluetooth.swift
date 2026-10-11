@@ -18,6 +18,8 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     private var pending: CheckedContinuation<Data, Error>?
     private var expected = "", operation = UUID()
     private var timeout: Task<Void, Never>?
+    private var preparing = false
+    private var timeResponder: Task<Void, Never>?
     private let pair = CBUUID(string: "123d8f06-62a1-4935-9322-833c531ee225")
     private let net = CBUUID(string: "4e941240-d01d-46b9-a5ea-67636806830b")
     private let status = CBUUID(string: "f557d96b-8284-4667-8793-b971c1deca2a")
@@ -37,7 +39,7 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     }
     func stopScan() { central.stopScan(); scanning = false }
     func disconnect() {
-        stopScan(); finish(error: CameraFailure(message: "蓝牙操作已取消"))
+        stopScan(); timeResponder?.cancel(); timeResponder = nil; finish(error: CameraFailure(message: "蓝牙操作已取消"))
         if let peripheral { central.cancelPeripheralConnection(peripheral) }; peripheral = nil
     }
     private func wait(_ event: String, start: () -> Void) async throws -> Data {
@@ -65,6 +67,7 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
         _ = try await wait("write:\(id)") { peripheral?.writeValue(data, for: c, type: .withResponse) }
     }
     func prepare(_ candidate: CameraCandidate) async throws -> CameraHotspot {
+        preparing = true; defer { preparing = false }
         disconnect(); peripheral = candidate.peripheral; candidate.peripheral.delegate = self
         if candidate.peripheral.state != .disconnected {
             _ = try await wait("disconnect") { central.cancelPeripheralConnection(candidate.peripheral) }
@@ -94,6 +97,19 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
         UserDefaults.standard.set(candidate.id.uuidString, forKey: "pairedCamera")
         return CameraHotspot(ssid: hotspotName, password: String(decoding: secret.prefix(while: { $0 != 0 }), as: UTF8.self), camera: candidate.id.uuidString)
     }
+    private func replyTimeRequest(_ p: CBPeripheral) {
+        guard timeResponder == nil else { return }
+        timeResponder = Task {
+            defer { timeResponder = nil }
+            while !Task.isCancelled && peripheral === p && (preparing || pending != nil) { try? await Task.sleep(nanoseconds: 100_000_000) }
+            guard !Task.isCancelled && peripheral === p && p.state == .connected else { return }
+            let now = Calendar.current.dateComponents([.year,.month,.day,.hour,.minute,.second], from: Date())
+            guard let year = now.year, let month = now.month, let day = now.day, let hour = now.hour, let minute = now.minute, let second = now.second else { return }
+            let payload = Data([UInt8(truncatingIfNeeded: year), UInt8(truncatingIfNeeded: year >> 8), UInt8(month), UInt8(day), UInt8(hour), UInt8(minute), UInt8(second)])
+            do { try await write(CBUUID(string: "e872b11f-d526-4ae1-9bb4-89a99d48fa59"), CBUUID(string: "b9bfd37f-ccad-4d36-a1ee-018e792b3edf"), payload); RunLog.shared.write("已响应相机时间同步请求") }
+            catch { RunLog.shared.write("相机时间同步未完成") }
+        }
+    }
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn { addPairedCamera() }
         if central.state != .poweredOn { stopScan(); finish(error: CameraFailure(message: "蓝牙不可用，请检查权限和开关")); message = "蓝牙不可用，请检查权限和开关" }
@@ -109,7 +125,7 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) { guard p === peripheral else { return }; if expected == "disconnect" && pending != nil { finish(event: "disconnect"); return }; finish(error: error ?? CameraFailure(message: "相机蓝牙已断开")); message = "蓝牙已断开；已建立的 Wi-Fi 会话可继续使用" }
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) { guard p === peripheral else { return }; finish(event: "services", error: error) }
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) { guard p === peripheral else { return }; finish(event: "characteristics:\(s.uuid)", error: error) }
-    func peripheral(_ p: CBPeripheral, didUpdateValueFor c: CBCharacteristic, error: Error?) { guard p === peripheral else { return }; finish(event: "read:\(c.uuid)", value: c.value ?? Data(), error: error) }
+    func peripheral(_ p: CBPeripheral, didUpdateValueFor c: CBCharacteristic, error: Error?) { guard p === peripheral else { return }; if c.uuid == CBUUID(string: "f9150137-5d40-4801-a8dc-f7fc5b01da50") && error == nil { replyTimeRequest(p) }; finish(event: "read:\(c.uuid)", value: c.value ?? Data(), error: error) }
     func peripheral(_ p: CBPeripheral, didWriteValueFor c: CBCharacteristic, error: Error?) { guard p === peripheral else { return }; finish(event: "write:\(c.uuid)", error: error) }
     func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor c: CBCharacteristic, error: Error?) { guard p === peripheral else { return }; finish(event: "notify:\(c.uuid)", error: error) }
 }

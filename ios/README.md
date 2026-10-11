@@ -28,7 +28,7 @@ IPA 必须通过 Apple 签名后才能安装，未签名的 CI `.app` 仅供编�
 
 ## 验证
 
-本机无完整 Xcode：C 原生桥接编译与生命周期检查、7 项 Foundation 恢复逻辑检查、Swift 语法解析和 plist 检查已通过。`swift test` 在此机器因缺少 XCTest 框架无法运行，不能算作完整 iOS 编译验证。
+本机无完整 Xcode：C 原生桥接编译与生命周期检查、8 项 Foundation 恢复逻辑检查、Swift 语法解析和 plist 检查已通过。`swift test` 在此机器因缺少 XCTest 框架无法运行，本地检查不能替代 iOS 编译验证。GitHub Actions 已通过 8 项 XCTest，并成功构建未签名 iPhone App。
 
 ```
 sh ios/tools/native-check.sh
