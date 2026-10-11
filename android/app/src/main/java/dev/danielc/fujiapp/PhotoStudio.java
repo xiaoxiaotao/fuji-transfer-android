@@ -12,47 +12,77 @@ import java.io.*;
 public final class PhotoStudio extends AppCompatActivity {
     private Uri source; private String name; private PhotoDetails details;
     private Bitmap photo, framed; private ImageView preview; private TextView info;
-    private Button save, share; private Spinner styles; private boolean closed, exporting; private int style;
+    private Button save, share;
+    private final PhotoFrame.Options options=new PhotoFrame.Options();
+    private final java.util.List<View> editors=new java.util.ArrayList<>();
+    private final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable refresh=()->render();
+    private Bitmap small; private LinearLayout templateRow;
+    private final java.util.List<Bitmap> templateBitmaps=new java.util.ArrayList<>();
+    private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
+    private TextView label(String text,int size){TextView v=new TextView(this);v.setText(text);v.setTextSize(size);v.setTextColor(0xffeef2ea);v.setPadding(0,dp(12),0,dp(8));return v;}
+    private android.graphics.drawable.GradientDrawable background(int color,int radius){android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+    private void highlight(LinearLayout row,int selected){for(int n=0;n<row.getChildCount();n++){View b=row.getChildAt(n);android.graphics.drawable.GradientDrawable bg=background(0xff26312b,12);bg.setStroke(dp(n==selected?2:1),n==selected?0xffb7d3b2:0xff38463c);b.setBackground(bg);}}
+    private void editorEnabled(View view,boolean enabled){view.setEnabled(enabled);if(view instanceof android.view.ViewGroup)for(int i=0;i<((android.view.ViewGroup)view).getChildCount();i++)editorEnabled(((android.view.ViewGroup)view).getChildAt(i),enabled);}
+ private boolean closed, exporting; private int style;
     static void open(android.content.Context c, Uri source, String name) {
         c.startActivity(new Intent(c,PhotoStudio.class).putExtra("target",source.toString()).putExtra("name",name));
     }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        android.content.SharedPreferences prefs=getSharedPreferences("frame_studio",0);
+        options.style=Math.max(0,Math.min(7,prefs.getInt("style",3)));options.paper=Math.max(0,Math.min(4,prefs.getInt("paper",0)));options.spacing=Math.max(3,Math.min(15,prefs.getInt("spacing",6)));options.author=prefs.getString("author","");options.parameters=prefs.getBoolean("parameters",true);
+        if(state!=null)options.title=state.getString("title","");
         String target=getIntent().getStringExtra("target"); name=getIntent().getStringExtra("name");
         if(target==null||name==null){finish();return;} source=Uri.parse(target);
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(20,20,20,20);
-        androidx.appcompat.widget.Toolbar bar=new androidx.appcompat.widget.Toolbar(this);bar.setTitle("照片详情与边框");root.addView(bar);
-        ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        info=new TextView(this);info.setText("正在读取原图参数…");info.setTextSize(15);content.addView(info);
-        styles=new Spinner(this);styles.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"白色参数边框","深色参数边框","简洁白边"}));content.addView(styles);
-        TextView note=new TextView(this);note.setText("导出 JPEG 副本，最长边约 2048 像素；不包含 GPS 和原图 EXIF，拍摄参数仅显示在边框上。");content.addView(note);
-        preview=new ImageView(this);preview.setAdjustViewBounds(true);content.addView(preview,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout actions=new LinearLayout(this);save=new Button(this);save.setText("保存边框副本");share=new Button(this);share.setText("分享边框副本");actions.addView(save,new LinearLayout.LayoutParams(0,-2,1));actions.addView(share,new LinearLayout.LayoutParams(0,-2,1));root.addView(actions);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(android.graphics.Color.rgb(16,22,20));
+        androidx.appcompat.widget.Toolbar bar=new androidx.appcompat.widget.Toolbar(this);bar.setTitle("边框工作室");bar.setSubtitle("FRAME STUDIO · 为瞬间装裱");root.addView(bar);
+        ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(18),dp(12),dp(18),dp(24));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        TextView heading=label("让每张照片，都成为作品",24);content.addView(heading);
+        TextView subtitle=label("画廊留白 · 胶片印记 · 旅途杂志",12);subtitle.setTextColor(0xff9ba99e);content.addView(subtitle);
+        preview=new ImageView(this);preview.setScaleType(ImageView.ScaleType.FIT_CENTER);preview.setPadding(dp(16),dp(16),dp(16),dp(16));preview.setBackground(background(0xff26312b,18));LinearLayout.LayoutParams imageParams=new LinearLayout.LayoutParams(-1,dp(330));imageParams.topMargin=dp(18);imageParams.bottomMargin=dp(20);content.addView(preview,imageParams);
+        content.addView(label("01   选择风格",16));
+        android.widget.HorizontalScrollView templates=new android.widget.HorizontalScrollView(this);templates.setHorizontalScrollBarEnabled(false);LinearLayout row=new LinearLayout(this);templates.addView(row);content.addView(templates);
+        templateRow=row;
+        for(int i=0;i<PhotoFrame.NAMES.length;i++){final int index=i;LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(6),dp(6),dp(6),dp(6));ImageView sample=new ImageView(this);sample.setScaleType(ImageView.ScaleType.FIT_CENTER);card.addView(sample,new LinearLayout.LayoutParams(-1,dp(92)));TextView caption=label(PhotoFrame.NAMES[i],12);caption.setGravity(android.view.Gravity.CENTER);card.addView(caption);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(110),dp(136));cp.setMargins(0,dp(8),dp(8),dp(8));row.addView(card,cp);card.setOnClickListener(v->{if(exporting)return;options.style=index;options.paper=index==1?2:(index==0||index==2?1:0);highlight(row,index);render();});}highlight(row,options.style);editors.add(row);
+        content.addView(label("02   纸张与留白",16));
+        LinearLayout colors=new LinearLayout(this);content.addView(colors);TextView paperHint=label("胶卷与宽银幕采用固定黑底，其余模板可切换纸色。",11);paperHint.setTextColor(0xff8c9b90);content.addView(paperHint);String[] colorNames={"暖白","雪白","墨黑","鼠尾草","沙色"};
+        for(int i=0;i<colorNames.length;i++){final int index=i;Button chip=new Button(this);chip.setText(colorNames[i]);chip.setTextSize(12);chip.setTextColor(i==2?0xffeeeeee:0xff26312b);chip.setBackground(background(PhotoFrame.PAPERS[i],12));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(44),1);cp.setMargins(dp(3),dp(6),dp(3),dp(8));colors.addView(chip,cp);chip.setOnClickListener(v->{if(exporting)return;options.paper=index;render();});}editors.add(colors);
+        TextView spacing=label("留白宽度 · "+options.spacing+"%",12);content.addView(spacing);SeekBar width=new SeekBar(this);width.setMax(12);width.setProgress(options.spacing-3);content.addView(width);editors.add(width);width.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){render();}public void onProgressChanged(SeekBar v,int n,boolean user){options.spacing=n+3;spacing.setText("留白宽度 · "+options.spacing+"%");}});
+        content.addView(label("03   文字与参数",16));
+        EditText title=new EditText(this);title.setHint("作品标题 · 留空使用模板标题");title.setText(options.title);title.setSingleLine(true);title.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(48)});content.addView(title);editors.add(title);
+        EditText author=new EditText(this);author.setHint("署名 · 画廊模板右下角");author.setText(options.author);author.setSingleLine(true);author.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(24)});content.addView(author);editors.add(author);
+        android.text.TextWatcher watcher=new android.text.TextWatcher(){public void beforeTextChanged(CharSequence t,int st,int count,int after){}public void onTextChanged(CharSequence t,int st,int before,int count){options.title=title.getText().toString();options.author=author.getText().toString();handler.removeCallbacks(refresh);handler.postDelayed(refresh,250);}public void afterTextChanged(android.text.Editable e){}};title.addTextChangedListener(watcher);author.addTextChangedListener(watcher);
+        androidx.appcompat.widget.SwitchCompat parameters=new androidx.appcompat.widget.SwitchCompat(this);parameters.setText("显示真实拍摄参数");parameters.setChecked(options.parameters);content.addView(parameters);editors.add(parameters);parameters.setOnCheckedChangeListener((button,value)->{options.parameters=value;render();});
+        Button disclosure=new Button(this);disclosure.setText("查看原图拍摄详情  ＋");disclosure.setAllCaps(false);content.addView(disclosure);info=new TextView(this);info.setText("正在读取原图参数…");info.setTextSize(13);info.setTextColor(0xffb7c2b9);info.setPadding(dp(12),dp(12),dp(12),dp(12));info.setBackground(background(0xff202a24,12));info.setVisibility(View.GONE);content.addView(info);disclosure.setOnClickListener(v->{boolean show=info.getVisibility()!=View.VISIBLE;info.setVisibility(show?View.VISIBLE:View.GONE);disclosure.setText(show?"收起原图拍摄详情  −":"查看原图拍摄详情  ＋");});
+        TextView note=label("原图保留 · JPEG 副本 · 照片最长边 2048px\n导出不含 GPS；胶片模拟暂未解析。",11);note.setTextColor(0xff8c9b90);content.addView(note);
+        LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(14),dp(8),dp(14),dp(12));save=new Button(this);save.setText("保存作品");share=new Button(this);share.setText("分享作品 ↗");share.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xffb7d3b2));share.setTextColor(0xff18251d);actions.addView(save,new LinearLayout.LayoutParams(0,dp(52),1));actions.addView(share,new LinearLayout.LayoutParams(0,dp(52),1));root.addView(actions);
         setContentView(root);setSupportActionBar(bar);getSupportActionBar().setDisplayHomeAsUpEnabled(true);MainActivity.applyInsets(getWindow(),root);enable(false);
-        styles.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){}public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){style=pos;render();}});
         save.setOnClickListener(v->export(false));share.setOnClickListener(v->export(true));
         new Thread(()->{
             Bitmap loaded=null;PhotoDetails metadata=null;String error=null;
             try{metadata=PhotoDetails.read(this,source,name);}catch(Exception e){metadata=new PhotoDetails();metadata.lines.add("拍摄参数不可读取；可预览的照片仍可添加边框。");}
             try{loaded=LocalMedia.decode(this,source,2048);if(loaded!=null && Math.max(loaded.getWidth(),loaded.getHeight())>2048){float factor=2048f/Math.max(loaded.getWidth(),loaded.getHeight());Bitmap scaled=Bitmap.createScaledBitmap(loaded,Math.max(1,Math.round(loaded.getWidth()*factor)),Math.max(1,Math.round(loaded.getHeight()*factor)),true);if(scaled!=loaded)loaded.recycle();loaded=scaled;}if(loaded==null)error="此格式不支持边框预览，请使用 JPEG 照片。";}catch(Exception|OutOfMemoryError e){error="照片读取失败，文件可能已移除或过大。";}
             final Bitmap bitmap=loaded;final PhotoDetails d=metadata;final String problem=error;
-            runOnUiThread(()->{if(closed){if(bitmap!=null)bitmap.recycle();return;}details=d;photo=bitmap;info.setText(d.text()+(problem==null?"":"\n"+problem));render();});
+            runOnUiThread(()->{if(closed){if(bitmap!=null)bitmap.recycle();return;}details=d;photo=bitmap;if(photo!=null){float ratio=Math.min(1,800f/Math.max(photo.getWidth(),photo.getHeight()));small=Bitmap.createScaledBitmap(photo,Math.max(1,Math.round(photo.getWidth()*ratio)),Math.max(1,Math.round(photo.getHeight()*ratio)),true);}makeTemplatePreviews();info.setText(d.text()+(problem==null?"":"\n"+problem));render();});
         },"photo-details").start();
     }
-    private void enable(boolean value){save.setEnabled(value);share.setEnabled(value);styles.setEnabled(!exporting);}
-    private void render(){if(photo==null||exporting)return;Bitmap old=framed;try{framed=PhotoFrame.render(photo,details,style);preview.setImageBitmap(framed);enable(true);}catch(OutOfMemoryError e){enable(false);Toast.makeText(this,"内存不足，无法生成边框",Toast.LENGTH_LONG).show();}if(old!=null&&old!=framed)old.recycle();}
+    private void makeTemplatePreviews(){if(small==null)return;float ratio=Math.min(1,200f/Math.max(small.getWidth(),small.getHeight()));Bitmap tiny=Bitmap.createScaledBitmap(small,Math.max(1,Math.round(small.getWidth()*ratio)),Math.max(1,Math.round(small.getHeight()*ratio)),true);try{for(int i=0;i<templateRow.getChildCount();i++){PhotoFrame.Options preset=new PhotoFrame.Options();preset.style=i;preset.paper=(i==1?2:0);Bitmap sample=PhotoFrame.render(tiny,details,preset);templateBitmaps.add(sample);((ImageView)((LinearLayout)templateRow.getChildAt(i)).getChildAt(0)).setImageBitmap(sample);}}catch(OutOfMemoryError e){Frontend.print("模板缩略图内存不足，保留主预览");}finally{if(tiny!=small)tiny.recycle();}}
+    @Override protected void onSaveInstanceState(Bundle state){state.putString("title",options.title);super.onSaveInstanceState(state);}
+    private void enable(boolean value){save.setEnabled(value);share.setEnabled(value);for(View editor:editors)editorEnabled(editor,!exporting);}
+    private void render(){if(photo==null||exporting||closed)return;getSharedPreferences("frame_studio",0).edit().putInt("style",options.style).putInt("paper",options.paper).putInt("spacing",options.spacing).putBoolean("parameters",options.parameters).putString("author",options.author).apply();Bitmap old=framed;try{framed=PhotoFrame.render(small,details,options);preview.setImageBitmap(framed);enable(true);}catch(OutOfMemoryError e){enable(false);Toast.makeText(this,"内存不足，无法生成边框",Toast.LENGTH_LONG).show();}if(old!=null&&old!=framed)old.recycle();}
     private void export(boolean sharing){if(framed==null||exporting)return;
-        if(!sharing && android.os.Build.VERSION.SDK_INT<29 && androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)!=android.content.pm.PackageManager.PERMISSION_GRANTED){androidx.core.app.ActivityCompat.requestPermissions(this,new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},42);Toast.makeText(this,"允许保存权限后，请再次点击保存",Toast.LENGTH_LONG).show();return;}exporting=true;enable(false);final Bitmap image=framed;
-        new Thread(()->{File file=null;Uri uri=null;String error=null;try{
+        if(!sharing && android.os.Build.VERSION.SDK_INT<29 && androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.WRITE_EXTERNAL_STORAGE)!=android.content.pm.PackageManager.PERMISSION_GRANTED){androidx.core.app.ActivityCompat.requestPermissions(this,new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},42);Toast.makeText(this,"允许保存权限后，请再次点击保存",Toast.LENGTH_LONG).show();return;}exporting=true;enable(false);final PhotoFrame.Options snapshot=options.copy();
+        new Thread(()->{File file=null;Uri uri=null;String error=null;Bitmap image=null;try{image=PhotoFrame.render(photo,details,snapshot);
             File folder=sharing?new File(getCacheDir(),"frames"):new File(PhotoStorage.stagingRoot(this,false),"fudge");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("无法创建保存目录");
             if(sharing){File[] old=folder.listFiles();if(old!=null)for(File cached:old)if(cached.getName().startsWith("Fuji-frame-") && System.currentTimeMillis()-cached.lastModified()>7L*24*60*60*1000)cached.delete();}
             file=new File(folder,"Fuji-frame-"+java.util.UUID.randomUUID()+".jpg");try(OutputStream out=new FileOutputStream(file)){if(!image.compress(Bitmap.CompressFormat.JPEG,95,out))throw new IOException("图片编码失败");}
             if(sharing)uri=Uri.fromFile(file);else{String target=PhotoStorage.publish(this,file.getAbsolutePath(),false);uri=target.startsWith("content:")?Uri.parse(target):Uri.fromFile(new File(target));if(android.os.Build.VERSION.SDK_INT>=29)file.delete();}
-        }catch(Exception e){error="导出失败："+e.getLocalizedMessage();if(file!=null)file.delete();}
+        }catch(Exception|OutOfMemoryError e){error="导出失败，请检查存储空间或减少留白";if(file!=null)file.delete();}finally{if(image!=null)image.recycle();}
         Frontend.print(error==null?"边框副本导出成功":"边框副本导出失败");
         final Uri result=uri;final String message=error;runOnUiThread(()->{exporting=false;if(closed){release();return;}enable(true);if(message!=null)Toast.makeText(this,message,Toast.LENGTH_LONG).show();else if(sharing)LocalMedia.share(this,result,"Fuji-frame.jpg");else Toast.makeText(this,"边框副本已保存到手机相册",Toast.LENGTH_LONG).show();});},"photo-frame-export").start();
     }
-    private void release(){if(framed!=null){framed.recycle();framed=null;}if(photo!=null){photo.recycle();photo=null;}}
+    private void release(){if(framed!=null){framed.recycle();framed=null;}if(small!=null&&small!=photo)small.recycle();small=null;if(photo!=null){photo.recycle();photo=null;}}
     @Override public boolean onOptionsItemSelected(MenuItem item){if(item.getItemId()==android.R.id.home){finish();return true;}return super.onOptionsItemSelected(item);}
-    @Override protected void onDestroy(){closed=true;preview.setImageDrawable(null);if(!exporting)release();super.onDestroy();}
+    @Override protected void onDestroy(){closed=true;handler.removeCallbacks(refresh);if(templateRow!=null)for(int i=0;i<templateRow.getChildCount();i++)((ImageView)((LinearLayout)templateRow.getChildAt(i)).getChildAt(0)).setImageDrawable(null);for(Bitmap bitmap:templateBitmaps)bitmap.recycle();templateBitmaps.clear();if(preview!=null)preview.setImageDrawable(null);if(!exporting)release();super.onDestroy();}
 }

@@ -24,6 +24,7 @@ final class PhotoDetails {
             result.camera = value(exif, "Model");
             String lens = value(exif, "LensModel"), time = value(exif, "DateTimeOriginal");
             String aperture = value(exif, "FNumber"), shutter = value(exif, "ExposureTime");
+            shutter = shutter(shutter);
             String iso = value(exif, "PhotographicSensitivity");
             if (iso.isEmpty()) iso = value(exif, "ISOSpeedRatings");
             add(result, "相机", result.camera); add(result, "镜头", lens); add(result, "拍摄时间", time);
@@ -36,6 +37,16 @@ final class PhotoDetails {
             result.lines.add("胶片模拟 / 配方：暂未解析富士 MakerNote");
         }
         return result;
+    }
+    static String shutter(String raw) {
+        try {
+            double seconds;
+            if(raw.contains("/")){String[] pieces=raw.split("/");seconds=Double.parseDouble(pieces[0])/Double.parseDouble(pieces[1]);}
+            else seconds=Double.parseDouble(raw);
+            if(!Double.isFinite(seconds)||seconds<=0)return raw;
+            if(seconds<0.5)return "1/"+Math.round(1/seconds);
+            return String.format(java.util.Locale.ROOT,"%.2f",seconds).replaceAll("0+$", "").replaceAll("\\.$", "");
+        }catch(RuntimeException e){return raw;}
     }
     private static String value(android.media.ExifInterface exif, String tag) {
         String text = exif.getAttribute(tag); return text == null ? "" : text.trim();
