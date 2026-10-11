@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat;
 public final class BackgroundCamera extends Service {
  static volatile boolean running,ready;
  static volatile String currentStatus="后台蓝牙未运行";
+ private static BackgroundCamera activeService;
  private FujiBluetooth bluetooth;
  private final Handler ui=new Handler(Looper.getMainLooper());
  private long retryAt;
@@ -22,6 +23,7 @@ public final class BackgroundCamera extends Service {
  private final BroadcastReceiver state=new BroadcastReceiver(){public void onReceive(Context c,Intent i){retryAt=0;failures=0;attemptInFlight=false;if(bluetooth!=null)bluetooth.disconnect();}};
  private final Runnable tick=new Runnable(){public void run(){
   if(!running)return;
+  if(MySettings.getSetting(BackgroundCamera.this,"background_enabled",0)!=1){shutdown();return;}
   try{
    if(!hasPermission(BackgroundCamera.this)){message="蓝牙权限已撤销，请返回应用授权";update();shutdown();return;}
    BluetoothManager manager=(BluetoothManager)getSystemService(BLUETOOTH_SERVICE);BluetoothAdapter adapter=manager.getAdapter();
@@ -38,9 +40,11 @@ public final class BackgroundCamera extends Service {
   ui.postDelayed(this,5000);
  }};
  static long retryDelay(int failures){return 10000L<<Math.min(3,Math.max(0,failures));}
- static boolean hasPermission(Context c){return Build.VERSION.SDK_INT<31||ContextCompat.checkSelfPermission(c,Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;}
+ static boolean hasPermission(Context c){return Build.VERSION.SDK_INT>=31
+  ? ContextCompat.checkSelfPermission(c,Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(c,Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED
+  : ContextCompat.checkSelfPermission(c,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;}
  static void pauseForForeground(Context c){Frontend.print("暂停后台蓝牙，交接给前台连接");c.stopService(new Intent(c,BackgroundCamera.class));}
- static void stop(Context c){MySettings.setSetting(c,"background_enabled",0);c.stopService(new Intent(c,BackgroundCamera.class));}
+ static void stop(Context c){MySettings.setSetting(c,"background_enabled",0);BackgroundCamera active=activeService;if(active!=null)active.releaseConnection();c.stopService(new Intent(c,BackgroundCamera.class));}
  static void start(Activity owner){
   try{
   if(!hasPermission(owner)){android.widget.Toast.makeText(owner,"请先在相机页完成蓝牙授权和配对",android.widget.Toast.LENGTH_LONG).show();return;}
@@ -64,6 +68,8 @@ public final class BackgroundCamera extends Service {
  }
  private void update(){currentStatus=message;ready=bluetooth!=null&&bluetooth.isConnected()&&!bluetooth.isBusy();((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(1802,notification());}
  private void shutdown(){Frontend.print("后台蓝牙服务停止");MySettings.setSetting(this,"background_enabled",0);stopSelf();}
+ private void releaseConnection(){running=false;ready=false;ui.removeCallbacksAndMessages(null);if(bluetooth!=null)bluetooth.close();}
+ @Override public void onCreate(){super.onCreate();activeService=this;}
  @Override public IBinder onBind(Intent i){return null;}
  @Override public int onStartCommand(Intent i,int flags,int id){
   if(i!=null&&"stop".equals(i.getAction())){shutdown();return START_NOT_STICKY;}
@@ -77,5 +83,5 @@ public final class BackgroundCamera extends Service {
    if(Build.VERSION.SDK_INT>=33)registerReceiver(state,new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),Context.RECEIVER_EXPORTED);else registerReceiver(state,new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));registered=true;ui.post(tick);return START_STICKY;
   }catch(RuntimeException e){Frontend.print("后台蓝牙启动未完成："+e.getClass().getSimpleName());shutdown();return START_NOT_STICKY;}
  }
- @Override public void onDestroy(){running=false;ready=false;currentStatus="后台蓝牙已停止";ui.removeCallbacksAndMessages(null);if(registered)unregisterReceiver(state);if(bluetooth!=null)bluetooth.close();stopForeground(true);super.onDestroy();}
+ @Override public void onDestroy(){if(activeService==this)activeService=null;running=false;ready=false;currentStatus="后台蓝牙已停止";ui.removeCallbacksAndMessages(null);if(registered)unregisterReceiver(state);if(bluetooth!=null)bluetooth.close();stopForeground(true);super.onDestroy();}
 }

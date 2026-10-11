@@ -1,6 +1,6 @@
-# Fuji Transfer Android
+# Fuji图库 · Fuji Transfer Android
 
-面向富士相机的 Android 连接、图库和图像传输应用，基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前版本：`0.2.3-zh.42-transfer`。
+**Fuji图库**是面向富士相机的 Android 连接、图库和图像传输应用，基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前开发版本：`0.2.3-zh.50-transfer-progress`。
 
 ## 下载 APK
 
@@ -10,14 +10,23 @@
 
 ## 当前功能
 
-- 中文界面，蓝牙启动相机 Wi-Fi、手动连接相机热点、USB 传图。
+- 中文界面、富士相机风格图标、墨绿与薄荷绿配色；支持蓝牙启动相机 Wi-Fi、手动连接相机热点、USB 传图。
+- 连接状态卡显示蓝牙、Wi-Fi、相机会话和图库的进度、错误及断开状态；初始化传输失败时尝试一次自动恢复。
 - 图库缩略图、筛选、预览，任意数量多选下载。
 - 下载任务与记录、本地图库、已下载文件管理、缓存和连接诊断。
+- 保存时统一显示百分比、已传大小与速度，避免多个进度来源互相覆盖、闪烁。
+- 设置中的「显示调试信息」默认关闭；运行日志独立持续记录，应用重启后保留最近约 2 MB。
 - 相机基本信息；后台蓝牙待机为实验功能。
 
 主要实测：X-E5 固件 1.12，小米 14 和小米 10 Pro。不同机型和 Android 版本需要实机验证。连接成功率仍在优化。
 
 实时监看、遥控拍摄入口和拍摄控制台已关闭，当前优先完善连接与传图。相机拍照后自动下载尚未实现。休眠或系统限制后台时也不能保证持续连接。
+
+## 最近更新与验证
+
+zh.43–zh.50 完善蓝牙识别、手动断开与重连、PTP 初始化恢复、连接状态提示及下载进度显示。zh.50 已在小米 10 Pro 覆盖安装，用户确认保存进度显示正常；zh.49 实机完成连接并读取 234 个文件的图库索引。其他相机、长时间后台传输和更广泛的系统兼容性仍需验证。
+
+详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 仍为 zh.42，最新代码版本为 zh.50。
 
 ## 构建
 
@@ -27,12 +36,25 @@
 git clone git@github.com:xiaoxiaotao/fuji-transfer-android.git
 cd fuji-transfer-android/android
 # 在 Android Studio 中打开此目录并配置 SDK，或设置 ANDROID_HOME。
-./gradlew --no-daemon -Pandroid.injected.build.abi=arm64-v8a -Pandroid.injected.testOnly=false assembleDebug lintDebug testDebugUnitTest
+bash gradlew --no-daemon -Pandroid.injected.build.abi=arm64-v8a -Pandroid.injected.testOnly=false assembleDebug lintDebug testDebugUnitTest
 ```
 
 APK 输出：`android/app/build/outputs/apk/debug/app-debug.apk`（Gradle 的注入式构建也可能位于 `intermediates/apk/debug/`）。当前日常测试使用 arm64-v8a。
 
-本地 zh.42 构建、Lint、54 项测试通过；GitHub Actions 会重新构建并保存测试版 APK。测试 APK 使用调试签名，未上传本机签名密钥，不能保证直接覆盖此前在另一台机器签名的安装包。
+本地 zh.50 构建、Lint、77 项 Android 测试及 8 项 native 初始化恢复场景通过；Lint 仍有 245 条警告，尚未全部清理。GitHub Actions 会重新构建并保存测试版 APK。测试 APK 使用调试签名，未上传本机签名密钥，不能保证直接覆盖此前在另一台机器签名的安装包。连续连接、断开、重连仍需实机验证。
+
+可单独验证 native 初始化恢复逻辑（需要 C 编译器）：
+
+```sh
+# 在仓库根目录执行
+sh tests/run-ptp-init-recovery.sh
+```
+
+## 调试与日志
+
+正常使用保持「设置 → 显示调试信息」关闭；排查问题时开启，可查看详细状态、复制当前诊断和访问实验入口。连接状态卡不受此开关影响。
+
+运行日志保存在应用私有的 `no_backup/run-logs/`，单文件达到 1 MiB 后轮换，保留 `current.log` 与 `previous.log`，不参与系统备份。Java 运行记录和具有 JNI 上下文的 PTP 记录持续写入；Android logcat 同时保留协议输出。进程被突然终止时，末尾尚未写入的记录可能丢失。诊断可能包含设备和网络信息，分享前请检查内容。
 
 ## 工程目录
 

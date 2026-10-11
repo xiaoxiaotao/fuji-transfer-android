@@ -44,8 +44,9 @@ final class DirectWifiDialog {
                 if(ContextCompat.checkSelfPermission(activity,permission)!=PackageManager.PERMISSION_GRANTED){ActivityCompat.requestPermissions(activity,new String[]{permission},92);guide.setText("请允许附近 Wi-Fi 或定位权限，然后再次点击“选择相机 Wi-Fi”。");return;}
                 if(!configure(activity,ip,mode))return;
                 MySettings.setSetting(activity,"direct_ssid",name);
-                try { int rc=MainActivity.wifi.connectToVisibleCameraAccessPoint(activity,name,secret);if(rc!=0){guide.setText("此系统请先在 Wi-Fi 设置连接相机，再选择“连接当前 Wi-Fi”。");return;} }
-                catch(SecurityException|IllegalArgumentException|IllegalStateException e){guide.setText("无法请求 Wi-Fi："+e.getMessage()+"。可在系统设置连接后重试。");return;}
+                ConnectionState.shared.begin(ConnectionState.Mode.WIFI);
+                try { int rc=MainActivity.wifi.connectToVisibleCameraAccessPoint(activity,name,secret);if(rc!=0){ConnectionState.shared.error(ConnectionState.Step.WIFI,"请先在系统设置连接相机热点，再选择直连");guide.setText("此系统请先在 Wi-Fi 设置连接相机，再选择“连接当前 Wi-Fi”。");return;} }
+                catch(SecurityException|IllegalArgumentException|IllegalStateException e){ConnectionState.shared.error(ConnectionState.Step.WIFI,"无法请求 Wi-Fi，请检查权限或在系统设置连接");guide.setText("无法请求 Wi-Fi："+e.getMessage()+"。可在系统设置连接后重试。");return;}
                 Frontend.print("等待系统连接相机热点…");dialog.dismiss();
             });
         });dialog.show();

@@ -19,6 +19,7 @@ public final class DownloadTransfer extends Service {
   final String session,camera;final int[] handles;final DownloadTask.State retry;final boolean force,privateSave;
   final Map<Integer,Long> hints;
   volatile boolean running=true,stop;
+  volatile Runnable afterStop;
   volatile int done,failed,skipped,total;
   volatile DownloadTask active;
   volatile String error="";
@@ -43,7 +44,17 @@ public final class DownloadTransfer extends Service {
  }
  private final Runnable tick=new Runnable(){public void run(){Run r=current;if(r!=null&&r.running){try{getSystemService(NotificationManager.class).notify(NOTIFICATION,notification(r));}catch(SecurityException ignored){}ui.postDelayed(this,1000);}}};
  private Notification notification(Run run){Intent open=new Intent(this,Gallery.class).putExtra("resume_transfer",true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|Intent.FLAG_ACTIVITY_SINGLE_TOP);PendingIntent content=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);PendingIntent stop=PendingIntent.getService(this,1,new Intent(this,DownloadTransfer.class).setAction("stop"),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);return new NotificationCompat.Builder(this,"camera-transfer").setSmallIcon(R.drawable.baseline_download_24).setContentTitle(run.stop?"当前照片完成后停止":"正在下载相机照片").setContentText(run.summary()).setStyle(new NotificationCompat.BigTextStyle().bigText(run.summary()+"\n"+(run.meter==null?"准备中":run.meter.detail()))).setContentIntent(content).setOngoing(true).setOnlyAlertOnce(true).setProgress(100,run.meter==null?0:run.meter.progress(),run.meter==null).addAction(0,"停止剩余",stop).build();}
- private void heartbeat(Run run){while(run.running&&!run.stop){if(Backend.cGetKillSwitch()){run.stop=true;return;}int rc=Backend.cPtpFujiPing();if(!run.running)return;if(rc!=0){run.stop=true;run.error="相机连接中断";Backend.reportErrorNonBlock(Backend.PTP_IO_ERR,"相机没有响应");return;}try{Thread.sleep(1000);}catch(InterruptedException e){return;}}}
+ private void heartbeat(Run run){
+  while(run.running&&!run.stop&&current==run){
+   if(Backend.cGetKillSwitch()){run.stop=true;return;}
+   int rc=Backend.cPtpFujiPing();
+   // A result arriving after an explicit stop must not force-close the session
+   // while the transfer worker is still saving the current photo.
+   if(!run.running||run.stop||current!=run)return;
+   if(rc!=0){run.stop=true;run.error="相机连接中断";Backend.reportErrorNonBlock(Backend.PTP_IO_ERR,"相机没有响应");return;}
+   try{Thread.sleep(1000);}catch(InterruptedException e){Thread.currentThread().interrupt();return;}
+  }
+ }
  private void execute(Run run,int startId){DownloadTasks store=DownloadTasks.get(this);File parent=PhotoStorage.stagingRoot(this,run.privateSave);File batchDir=new File(new File(parent,"fudge"),"batch-"+UUID.randomUUID());
   try{List<DownloadTask> batch=run.handles==null?store.retryable(run.session,run.retry):store.create(run.session,run.handles);if(run.handles==null)store.resetForRetry(batch);run.total=batch.size();run.meter=new TransferMeter(batch.size());for(DownloadTask task:batch){Long hint=run.hints.get(task.handle);if(hint!=null)run.meter.expect(task.handle,hint);}
    final boolean[] stoppedSaved={false};
@@ -55,7 +66,7 @@ public final class DownloadTransfer extends Service {
     else if(task.state()==DownloadTask.State.FAILED){run.failed++;run.meter.finish(task.handle,false);Frontend.print(task.name+"："+task.error());}
    });
   }catch(Exception e){run.error=e.getMessage()==null?"下载无法继续":e.getMessage();}
-  finally{batchDir.delete();run.active=null;ui.post(()->{ui.removeCallbacks(tick);releaseLocks();stopForeground(true);run.running=false;stopSelfResult(startId);Gallery.resumeAll();});}
+  finally{batchDir.delete();run.active=null;ui.post(()->{ui.removeCallbacks(tick);releaseLocks();stopForeground(true);run.running=false;stopSelfResult(startId);Runnable finished=run.afterStop;run.afterStop=null;if(finished!=null)finished.run();else Gallery.resumeAll();});}
  }
  private void download(Run run,DownloadTasks store,DownloadTask task,File batchDir)throws Exception{
   if(cpu!=null)cpu.acquire(30*60*1000L);

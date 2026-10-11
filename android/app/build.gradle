@@ -15,8 +15,8 @@ android {
         applicationId "dev.danielc.fujiapp"
         minSdk 23
         targetSdk 35
-        versionCode 54
-        versionName "0.2.3-zh.42-transfer"
+        versionCode 62
+        versionName "0.2.3-zh.50-transfer-progress"
     }
 
     buildTypes {

@@ -6,6 +6,7 @@ build/
 config.mak
 *.exe
 *.txt
+!CMakeLists.txt
 optest
 wifi
 dump*

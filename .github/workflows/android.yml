@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify PTP initialization recovery
+        run: sh tests/run-ptp-init-recovery.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -209,6 +209,14 @@ JNI_FUNC(jbyteArray, cFujiGetThumb)(JNIEnv *env, jobject thiz, jint handle) {
 	return ret;
 }
 
+static void connection_progress(int stage) {
+    JNIEnv *env=get_jni_env();
+    (*env)->PushLocalFrame(env, 4);
+    jclass frontend=(*env)->FindClass(env,"dev/danielc/fujiapp/Frontend");
+    jmethodID method=(*env)->GetStaticMethodID(env,frontend,"protocolProgress","(I)V");
+    (*env)->CallStaticVoidMethod(env,frontend,method,stage);
+    (*env)->PopLocalFrame(env,NULL);
+}
 JNI_FUNC(jint, cFujiSetup)(JNIEnv *env, jobject thiz) {
 	set_jni_env(env);
 	struct PtpRuntime *r = ptp_get();
@@ -217,6 +225,7 @@ JNI_FUNC(jint, cFujiSetup)(JNIEnv *env, jobject thiz) {
 		return PTP_IO_ERR;
 	}
 
+	fuji_get(r)->connection_progress=connection_progress;
 	return fuji_connection_entry(r);
 }
 

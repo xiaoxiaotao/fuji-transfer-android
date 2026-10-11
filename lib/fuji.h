@@ -56,6 +56,8 @@ struct DiscoverInfo {
 
 /// @brief Holds runtime info about the camera
 struct FujiDeviceKnowledge {
+    // Optional frontend progress callback: 0=handshake, 1=OpenSession, 2=recovery.
+    void (*connection_progress)(int stage);
     uint32_t console_events[8];
     unsigned console_events_valid;
     int console_remote_active;

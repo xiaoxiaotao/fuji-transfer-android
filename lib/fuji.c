@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 #include <libpict.h>
 #include <sys/stat.h>
 #include "app.h"
@@ -15,6 +16,7 @@
 #include "wifi_protocol.h"
 #include "xapp_probe.h"
 
+static int fuji_init_with_recovery(struct PtpRuntime *r, char *name, struct PtpFujiInitResp *resp);
 
 struct FujiDeviceKnowledge *fuji_get(struct PtpRuntime *r) {
 	return (struct FujiDeviceKnowledge *)r->userdata;
@@ -46,7 +48,8 @@ void ptp_report_error(struct PtpRuntime *r, const char *reason, int code) {
 	// Safely disconnect if intentional
 	if (code == 0) {
 		ptp_verbose_log("Closing session\n");
-		ptp_close_session(r);
+		int close_rc = ptp_close_session(r);
+		app_print("CloseSession result: %d", close_rc);
 	}
 
 	r->operation_kill_switch = 1;
@@ -56,7 +59,8 @@ void ptp_report_error(struct PtpRuntime *r, const char *reason, int code) {
 	if (r->connection_type == PTP_IP_USB) {
 		// Send Fuji's 'goodbye' packet - we don't care if this fails or not
 		uint8_t goodbye_packet[] = {0x8, 0x0, 0x0, 0x0, 0xff, 0xff, 0xff, 0xff};
-		ptpip_cmd_write(r, goodbye_packet, 8);
+		int goodbye_rc = ptpip_cmd_write(r, goodbye_packet, 8);
+		app_print("Fuji goodbye write result: %d", goodbye_rc);
 
 		ptpip_device_close(r);
 	} else if (r->connection_type == PTP_USB) {
@@ -130,16 +134,18 @@ int fuji_connection_entry(struct PtpRuntime *r) {
 // Assumes cmd socket is valid
 int fuji_setup(struct PtpRuntime *r) {
 	struct FujiDeviceKnowledge *fuji = fuji_get(r);
+	if(fuji->connection_progress)fuji->connection_progress(0);
 
 	app_print(fuji->auto_protocol ? "正在建立相机协议连接…" : fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? "正在建立 XApp 协议连接…" : "请在相机上按 OK 确认连接。");
 
 	char *device_name = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? strdup("Fudge-XE5") : app_get_client_name();
 
 	struct PtpFujiInitResp resp;
-	int rc = ptpip_fuji_init_req(r, device_name, &resp);
-	if (rc == PTP_RUNTIME_ERR) {
+	int xapp = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM;
+	int rc = xapp ? fuji_init_with_recovery(r, device_name, &resp) : ptpip_fuji_init_req(r, device_name, &resp);
+	if (!xapp && rc == PTP_RUNTIME_ERR) {
 		rc = ptpip_fuji_init_req(r, device_name, &resp);
-	} else if (rc) {
+	} else if (!xapp && rc) {
 		usleep(1000); // One last chance...
 		rc = ptpip_fuji_init_req(r, device_name, &resp);
 	}
@@ -160,6 +166,7 @@ int fuji_setup(struct PtpRuntime *r) {
 	}
 
 	app_print("正在打开 PTP 会话…");
+    if(fuji->connection_progress)fuji->connection_progress(1);
     if (fuji->auto_protocol || fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
         // Match current libfuji: Fujifilm starts OpenSession at transaction 1.
         r->session++;
@@ -286,7 +293,8 @@ int fuji_setup_remote_mode(struct PtpRuntime *r) {
 
 static long get_ms(void);
 
-static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct PtpFujiInitResp *resp) {
+static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct PtpFujiInitResp *resp, int *transport_failed) {
+    if (transport_failed) *transport_failed = 0;
 	struct FujiInitPacket *p = (struct FujiInitPacket *)r->data;
 	memset(p, 0, sizeof(struct FujiInitPacket));
 	ptp_write_u32(&p->length, 0x52);
@@ -300,7 +308,12 @@ static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct 
 
 	ptp_write_unicode_string(p->device_name, device_name);
 
-	if (ptpip_cmd_write(r, r->data, (int)p->length) != (int)p->length) return PTP_IO_ERR;
+	int written = ptpip_cmd_write(r, r->data, (int)p->length);
+	if (written != (int)p->length) {
+        if (transport_failed) *transport_failed = 1;
+        app_print("PTP 初始化写入失败：bytes=%d，errno=%d", written, errno);
+        return PTP_IO_ERR;
+    }
 
     // TCP may return a partial header/body or zero bytes on socket timeout.
     memset(r->data, 0, 256);
@@ -309,7 +322,9 @@ static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct 
     while (received < required) {
         int x = ptpip_cmd_read(r, r->data + received, required - received);
         if (x < 0 || r->io_kill_switch || get_ms() >= deadline) {
-            app_print("PTP 握手响应读取失败或超时。"); return PTP_IO_ERR;
+            if (transport_failed) *transport_failed = 1;
+            app_print("PTP 握手响应读取失败：read=%d，errno=%d，received=%u/%u，cancelled=%d", x, errno, received, required, r->io_kill_switch);
+            return PTP_IO_ERR;
         }
         if (x == 0) { usleep(10000); continue; }
         received += x;
@@ -328,7 +343,7 @@ static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct 
     }
 
 	if (p->type == PTPIP_INIT_FAIL) {
-		ptp_verbose_log("PTPIP_INIT_FAIL\n");
+		app_print("相机明确拒绝 PTP 初始化连接（INIT_FAIL）。");
 		return PTP_RUNTIME_ERR;
 	}
 
@@ -343,9 +358,28 @@ static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct 
 }
 int ptpip_fuji_init_req(struct PtpRuntime *r, char *device_name, struct PtpFujiInitResp *resp) {
 	ptp_mutex_lock(r);
-	int rc = ptpip_fuji_init_req_(r, device_name, resp);
+	int rc = ptpip_fuji_init_req_(r, device_name, resp, NULL);
 	ptp_mutex_unlock(r);
 	return rc;
+}
+
+// Recover only transport failure before OpenSession, never a camera rejection
+// or a gallery/download operation. Serialize recovery with manual teardown.
+static int fuji_init_with_recovery(struct PtpRuntime *r, char *name, struct PtpFujiInitResp *resp) {
+    ptp_mutex_lock(r);
+    int transport_failed = 0;
+    int rc = ptpip_fuji_init_req_(r, name, resp, &transport_failed);
+    if (rc == PTP_IO_ERR && transport_failed && !r->io_kill_switch && !r->operation_kill_switch) {
+        app_print("PTP 初始化传输失败，关闭旧 TCP 连接后恢复一次…");
+        if(fuji_get(r)->connection_progress)fuji_get(r)->connection_progress(2);
+        ptpip_device_close(r);
+        usleep(1000000);
+        rc = ptpip_connect(r, fuji_get(r)->ip_address, FUJI_CMD_IP_PORT, 3);
+        if (!rc) rc = ptpip_fuji_init_req_(r, name, resp, NULL);
+        app_print("PTP 初始化恢复结果：rc=%d", rc);
+    }
+    ptp_mutex_unlock(r);
+    return rc;
 }
 
 int fuji_d228(void) {

@@ -60,6 +60,13 @@ public class WiFiComm {
     public long selectedNetworkHandle(){Network selected=foundWiFiDevice;return selected==null?NOT_AVAILABLE:selected.getNetworkHandle();}
     public Object selectionToken(){return lastCallback;}
 
+    /** Release only the app-owned hotspot request, after PTP CloseSession has finished. */
+    public synchronized void releaseCameraNetwork(){
+        ConnectivityManager.NetworkCallback previous=lastCallback;
+        lastCallback=null;foundWiFiDevice=null;selectedAddressReady=false;selecting=false;
+        if(previous!=null&&cm!=null){try{cm.unregisterNetworkCallback(previous);}catch(IllegalArgumentException|SecurityException ignored){}}
+    }
+
     // Non-static event handlers since a frontend may need to spawn two listeners
     public Handler handler = null;
     public Runnable onAvailable = null;

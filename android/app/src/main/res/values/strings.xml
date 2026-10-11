@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name" translatable="false">Fudge</string>
+    <string name="app_name" translatable="false">Fuji图库</string>
     <string name="url" translatable="false">https://github.com/petabyt/fudge</string>
-    <string name="motd_thing" translatable="false">Fudge 中文测试版</string>
+    <string name="motd_thing" translatable="false">Fuji图库</string>
     <string name="connect_to_usb">通过 USB 连接</string>
     <string name="plugins">插件</string>
     <string name="help">帮助</string>
@@ -34,7 +34,7 @@
     <string name="discovery_failed">相机发现失败…</string>
     <string name="stop_importing">停止</string>
     <string name="camera_discovery_title">查找相机</string>
-    <string name="camera_discovery_help">Fudge 正在查找局域网内的相机。普通无线连接请点击“通过 Wi-Fi 连接”。此版本不支持蓝牙配对。</string>
+    <string name="camera_discovery_help">Fuji图库正在查找局域网内的相机。普通无线连接请点击“通过 Wi-Fi 连接”。此版本不支持蓝牙配对。</string>
     <string name="img_credits">图片由 thevibrantmachine 提供</string>
     <string name="looking_for_a_camera">局域网相机发现（非蓝牙）</string>
     <string name="bullet_pc_autosave">• 电脑自动保存</string>
@@ -57,4 +57,5 @@
     <string name="select_wifi_network">选择 Wi-Fi</string>
     <string name="try_to_connect_to_anything">连接</string>
     <string name="hint_disconnect_from_main_network">提示：可尝试断开其他 2.4 GHz Wi-Fi 网络，以减少无线传输干扰。</string>
+    <string name="connection_status_details_title">%1$s ›</string>
 </resources>

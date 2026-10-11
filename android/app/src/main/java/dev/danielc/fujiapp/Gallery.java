@@ -68,7 +68,23 @@ public class Gallery extends AppCompatActivity {
     static CameraInfo currentInfo(){Gallery gallery=getInstance();return gallery==null||!gallery.alive||Backend.cGetKillSwitch()?null:gallery.cameraInfo;}
     static void discardPreviousSession(){Gallery old=getInstance();if(old!=null){old.alive=false;old.stopOwnQueues();old.finish();}connectionSnapshot=null;}
     private void stopOwnQueues(){if(imageAdapter!=null)imageAdapter.queue.stopRequestThread();if(list!=null)list.queue.stopRequestThread();}
-    static void disconnectFrom(android.app.Activity owner){if(RemoteSession.isBusy()){android.widget.Toast.makeText(owner,"正在恢复相机模式，请稍后断开",android.widget.Toast.LENGTH_SHORT).show();return;}DownloadTransfer.Run run=DownloadTransfer.current;if(run!=null&&run.running){run.stop=true;android.widget.Toast.makeText(owner,"当前文件完成后停止，请稍后再断开连接",android.widget.Toast.LENGTH_LONG).show();return;}Gallery old=getInstance();if(old!=null){old.alive=false;old.stopOwnQueues();old.finish();}connectionSnapshot=null;Backend.reportErrorNonBlock(0,"正在断开连接");WorkbenchNav.open(owner,WorkbenchNav.CAMERA);}
+    static void disconnectFrom(android.app.Activity owner){
+        MainActivity.stopAutomaticConnection(owner);
+        if(RemoteSession.isBusy()){android.widget.Toast.makeText(owner,"后台重连已停止，正在恢复相机模式，请稍后断开",android.widget.Toast.LENGTH_SHORT).show();return;}
+        DownloadTransfer.Run run=DownloadTransfer.current;
+        if(run!=null&&run.running){
+            run.afterStop=()->finishDisconnect(owner);
+            run.stop=true;
+            android.widget.Toast.makeText(owner,"后台重连已停止，当前照片保存完成后自动断开",android.widget.Toast.LENGTH_LONG).show();return;
+        }
+        finishDisconnect(owner);
+    }
+    private static void finishDisconnect(android.app.Activity owner){
+        Gallery old=getInstance();if(old!=null){old.alive=false;old.stopOwnQueues();old.finish();}
+        connectionSnapshot=null;
+        MainActivity.closeManualSession(()->{if(!owner.isDestroyed())WorkbenchNav.open(owner,WorkbenchNav.CAMERA);});
+    }
+
     private DownloadTransfer.Run appliedRun;
     private final java.util.Set<Integer> appliedSaved=new java.util.HashSet<>();
     private static Snapshot connectionSnapshot;
@@ -202,6 +218,7 @@ public class Gallery extends AppCompatActivity {
                 if (getInstance() == null) return;
                 TextView tv = getInstance().findViewById(R.id.gallery_logs);
                 if (tv == null) return;
+                tv.setVisibility(DebugUi.enabled(tv.getContext()) ? View.VISIBLE : View.GONE);
                 tv.setText(arg);
             }
         });
@@ -209,6 +226,7 @@ public class Gallery extends AppCompatActivity {
 
     void fail(int code, String reason) {
         alive=false;stopOwnQueues();
+        ConnectionState.shared.error(ConnectionState.shared.snapshot().steps[2]==ConnectionState.Status.READY?ConnectionState.Step.GALLERY:ConnectionState.Step.SESSION,reason);
         Backend.reportError(code, reason);
         handler.post(this::finish);
     }
@@ -362,8 +380,8 @@ public class Gallery extends AppCompatActivity {
         instance = new WeakReference<>(this);
         handler = new Handler(Looper.getMainLooper());
         tasks=DownloadTasks.get(this);
-        findViewById(R.id.camera_status).setOnClickListener(v->showCameraInfo());
-        findViewById(R.id.camera_status).setOnLongClickListener(v->{String diagnostic=Frontend.getConnectionDiagnostic();new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("连接诊断").setMessage(diagnostic).setPositiveButton("复制诊断",(d,w)->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Fudge 连接诊断",diagnostic))).setNegativeButton("关闭",null).show();return true;});
+        findViewById(R.id.connection_status_panel).setOnClickListener(v->showCameraInfo());
+        findViewById(R.id.connection_status_panel).setOnLongClickListener(v->{if (!DebugUi.enabled(this)) return false; String diagnostic=Frontend.getConnectionDiagnostic();new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("连接诊断").setMessage(diagnostic).setPositiveButton("复制诊断",(d,w)->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Fudge 连接诊断",diagnostic))).setNegativeButton("关闭",null).show();return true;});
         findViewById(R.id.filter_photos).setOnClickListener(v->showFilters());
         findViewById(R.id.range_photos).setOnClickListener(v->showRange());
 
@@ -402,7 +420,9 @@ public class Gallery extends AppCompatActivity {
             @Override
             public void run() {
                 Frontend.print("正在启动照片库");
+                ConnectionState.shared.update(ConnectionState.Step.SESSION,ConnectionState.Status.CONNECTING,"正在建立相机会话");
                 int rc = Backend.cFujiSetup();
+                if(!alive||MainActivity.manualDisconnected||MainActivity.disconnecting)return;
                 if (rc != 0) {
                     fail(rc, "初始化失败");
                     return;
@@ -410,6 +430,8 @@ public class Gallery extends AppCompatActivity {
 
                 // SINGLE/MULTIPLE downloader fuji will gracefully kill connection (done in cFujiSetup)
                 if (Backend.cGetKillSwitch()) return;
+                ConnectionState.shared.update(ConnectionState.Step.SESSION,ConnectionState.Status.READY,"相机会话连接成功");
+                ConnectionState.shared.update(ConnectionState.Step.GALLERY,ConnectionState.Status.CONNECTING,"正在读取相机照片索引");
 
                 Frontend.print("正在进入照片库…");
                 rc = Backend.cFujiConfigImageGallery();
@@ -420,6 +442,8 @@ public class Gallery extends AppCompatActivity {
 
                 objectHandles = Backend.cFujiGetObjectHandles();
                 visibleHandles=objectHandles;
+                if(objectHandles!=null)ConnectionState.shared.update(ConnectionState.Step.GALLERY,ConnectionState.Status.READY,"图库已就绪 · "+objectHandles.length+" 个文件");
+                else ConnectionState.shared.error(ConnectionState.Step.GALLERY,"无法读取相机照片索引，请重新连接");
                 CameraInfo snapshot=new CameraInfo(Backend.cGetCachedCameraInfo(),Backend.cGetTransport(),objectHandles==null?0:objectHandles.length,android.os.SystemClock.elapsedRealtime());
                 cameraInfo=snapshot;saveSnapshot();handler.post(()->{if(alive){renderCameraCard();updateSelectionUi();}});
 

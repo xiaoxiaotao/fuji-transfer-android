@@ -82,7 +82,12 @@ public class MySettings extends AppCompatActivity {
         findViewById(R.id.settings_diagnostic).setOnClickListener(v->{String diagnostic=Frontend.getConnectionDiagnostic();new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("连接与传输诊断").setMessage(diagnostic.isEmpty()?"尚无诊断记录":diagnostic).setPositiveButton("复制",(d,w)->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Fudge 诊断",diagnostic))).setNegativeButton("关闭",null).show();});
         android.widget.Button standby=new android.widget.Button(this,null,0,R.style.UiTextButton);standby.setText("后台蓝牙连接 · 实验");
         ((android.view.ViewGroup)findViewById(R.id.settings_help).getParent()).addView(standby);
-        standby.setOnClickListener(v->new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("后台蓝牙连接").setMessage("保持与已配对相机的蓝牙连接，关闭界面后仍在通知栏显示状态。\n\n当前用于验证拍摄通知，自动下载尚未开放。手动进入图库时会自动交接连接；退出图库后恢复后台待机。").setPositiveButton("开启",(d,w)->BackgroundCamera.start(this)).setNeutralButton("停止",(d,w)->BackgroundCamera.stop(this)).setNegativeButton("关闭",null).show());
+        standby.setOnClickListener(v->new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("后台蓝牙连接").setMessage("保持与已配对相机的蓝牙连接，关闭界面后仍在通知栏显示状态。\n\n当前用于验证拍摄通知，自动下载尚未开放。手动进入图库时会自动交接连接；退出图库后恢复后台待机；点击“断开连接”会停止后台待机，需手动重新开启。").setPositiveButton("开启",(d,w)->BackgroundCamera.start(this)).setNeutralButton("停止",(d,w)->BackgroundCamera.stop(this)).setNegativeButton("关闭",null).show());
+        standby.setTag("debug_only");
+        androidx.appcompat.widget.SwitchCompat debug=findViewById(R.id.setting_debug);
+        debug.setChecked(DebugUi.enabled(this));
+        debug.setOnCheckedChangeListener((button,checked)->{setSetting(this,"show_debug",checked?1:0);DebugUi.apply(this);Frontend.updateLog();});
+        DebugUi.apply(this);
         actionBar.setTitle(R.string.settings);
         setupTextView(findViewById(R.id.ip_address_text), "ip_address", defaultIPAddress);
         setupTextView(findViewById(R.id.wpa_password), "wpa_password", defaultPassword);

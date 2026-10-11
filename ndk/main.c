@@ -89,10 +89,18 @@ void app_get_tether_file_path(char buffer[256]) {
 	#endif
 #endif
 
+static void record_native_log(const char *message) {
+    // Threads without a Java context still retain Android logcat output.
+    JNIEnv *env = local.env;
+    if (env == NULL) return;
+    if ((*env)->PushLocalFrame(env, 4) != 0) return;
+    jclass frontend = get_frontend_class(env);
+    jmethodID method = (*env)->GetStaticMethodID(env, frontend, "recordNativeLog", "(Ljava/lang/String;)V");
+    if (method != NULL) (*env)->CallStaticVoidMethod(env, frontend, method, (*env)->NewStringUTF(env, message));
+    (*env)->PopLocalFrame(env, NULL);
+}
+
 void ptp_verbose_log(char *fmt, ...) {
-#ifndef VERBOSE
-	if (backend.log_buf == NULL) return;
-#endif
 
 	char buffer[512] = {0};
 	va_list args;
@@ -101,11 +109,10 @@ void ptp_verbose_log(char *fmt, ...) {
 	va_end(args);
 
 	__android_log_write(ANDROID_LOG_ERROR, "ptp_verbose_log", buffer);
+    record_native_log(buffer);
 
 	// not thread safe
-#ifdef VERBOSE
 	if (backend.log_buf == NULL) return;
-#endif
 
 	char buffer2[512];
 	snprintf(buffer2, sizeof(buffer2), "%d\t%s", (int)clock() * 1000 / CLOCKS_PER_SEC, buffer);
@@ -127,6 +134,7 @@ void ptp_error_log(char *fmt, ...) {
 	va_end(args);
 
 	__android_log_write(ANDROID_LOG_ERROR, "ptp_error_log", buffer);
+    record_native_log(buffer);
 	// TODO: Also write to log buffer?
 }
 

@@ -16,6 +16,12 @@ import dev.danielc.common.Camlib;
 import dev.danielc.common.WiFiComm;
 
 public class Frontend {
+    public static void recordNativeLog(String message) { RunLog.record("PTP " + message); }
+    public static void protocolProgress(int stage) {
+        ConnectionState.shared.update(ConnectionState.Step.SESSION,
+            stage==2?ConnectionState.Status.RETRYING:ConnectionState.Status.CONNECTING,
+            stage==2?"相机会话连接未完成，正在自动恢复，请稍候":stage==1?"正在建立相机会话":"Wi-Fi 已连接，正在确认相机响应");
+    }
     public static String parseErr(int rc) {
         switch (rc) {
             case Camlib.PTP_NO_DEVICE: return "未找到设备。";
@@ -87,6 +93,7 @@ public class Frontend {
         connectionDiagnostic.append(arg).append('\n');
         if (connectionDiagnostic.length() > 32768) connectionDiagnostic.delete(0, connectionDiagnostic.length() - 32768);
         Log.d("fudge", arg);
+        RunLog.record(arg);
 
         basicLog += arg + "\n";
 

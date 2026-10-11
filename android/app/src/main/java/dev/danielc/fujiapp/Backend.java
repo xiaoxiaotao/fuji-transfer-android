@@ -42,6 +42,7 @@ public class Backend extends Camlib {
     public native static void cReportError(int code, String reason);
     public static void reportError(int code, String reason) {
         if (Backend.cGetKillSwitch()) return;
+        if(code!=0){ConnectionState.Snapshot state=ConnectionState.shared.snapshot();ConnectionState.shared.error(state.steps[2]==ConnectionState.Status.READY?ConnectionState.Step.GALLERY:ConnectionState.Step.SESSION,reason==null?"相机通信中断，请重新连接":reason);}
         Log.d("fudge", reason);
         Gallery.stopAll();
         cReportError(code, reason);
