@@ -3,15 +3,16 @@ import android.graphics.*;
 
 /** Original photograph is never cropped or overwritten. All typography scales with output. */
 final class PhotoFrame {
-    static final String[] NAMES={"经典参数","夜色参数","纯净留白","画廊藏品","即刻胶片","35mm 胶卷","旅途杂志","宽银幕"};
+    static final String[] NAMES={"经典参数","夜色参数","纯净留白","画廊藏品","即刻胶片","35mm 胶卷","旅途杂志","宽银幕","雾光卡片","光影参数","琉璃色盘"};
     static final int[] PAPERS={Color.rgb(248,246,239),Color.WHITE,Color.rgb(24,28,26),Color.rgb(225,230,220),Color.rgb(233,221,207)};
     static final class Options {
-        int style=3, paper=0, spacing=6; boolean parameters=true;
+        int style=8, paper=0, spacing=6, blur=4, corners=18, shadow=18; boolean parameters=true,sidebarRight;
         String title="", author="";
-        Options copy(){Options o=new Options();o.style=style;o.paper=paper;o.spacing=spacing;o.parameters=parameters;o.title=title;o.author=author;return o;}
+        Options copy(){Options o=new Options();o.style=style;o.paper=paper;o.spacing=spacing;o.blur=blur;o.corners=corners;o.shadow=shadow;o.parameters=parameters;o.sidebarRight=sidebarRight;o.title=title;o.author=author;return o;}
     }
     static Bitmap render(Bitmap photo,PhotoDetails details,int style){Options o=new Options();o.style=style;o.paper=style==1?2:1;o.spacing=4;return render(photo,details,o);}
     static Bitmap render(Bitmap photo,PhotoDetails details,Options o){
+        if(o.style>=8)return LightFrame.render(photo,details,o);
         int w=photo.getWidth(),h=photo.getHeight(),m=Math.max(1,w*o.spacing/100);
         boolean plain=o.style==2,film=o.style==5,magazine=o.style==6,cinema=o.style==7;
         int top=film?m*2:magazine?Math.max(m,w/7):m;

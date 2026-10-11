@@ -10,7 +10,7 @@ import java.util.List;
 /** Reads only the downloaded original. Missing fields are never inferred from the preview. */
 final class PhotoDetails {
     final List<String> lines = new ArrayList<>();
-    String camera = "", exposure = "";
+    String camera = "", exposure = "", lens="", aperture="", shutter="", iso="";
     static PhotoDetails read(Context context, Uri uri, String name) throws IOException {
         PhotoDetails result = new PhotoDetails();
         result.lines.add("文件：" + name);
@@ -24,9 +24,9 @@ final class PhotoDetails {
             result.camera = value(exif, "Model");
             String lens = value(exif, "LensModel"), time = value(exif, "DateTimeOriginal");
             String aperture = value(exif, "FNumber"), shutter = value(exif, "ExposureTime");
-            shutter = shutter(shutter);
+            shutter = shutter(shutter);result.lens=lens;result.aperture=aperture.isEmpty()?"":"f/"+aperture;result.shutter=shutter.isEmpty()?"":shutter+" s";
             String iso = value(exif, "PhotographicSensitivity");
-            if (iso.isEmpty()) iso = value(exif, "ISOSpeedRatings");
+            if (iso.isEmpty()) iso = value(exif, "ISOSpeedRatings");result.iso=iso;
             add(result, "相机", result.camera); add(result, "镜头", lens); add(result, "拍摄时间", time);
             add(result, "光圈", aperture.isEmpty() ? "" : "f/" + aperture);
             add(result, "快门", shutter.isEmpty() ? "" : shutter + " s"); add(result, "ISO", iso);
