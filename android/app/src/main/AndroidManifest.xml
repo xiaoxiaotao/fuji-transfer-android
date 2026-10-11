@@ -42,6 +42,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FujiWifiApp"
         tools:targetApi="35">
+        <activity android:name=".FrameHome" android:exported="true" android:theme="@style/Theme.FujiWifiApp.NoActionBar">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
         <activity
             android:name=".FileGallery" android:theme="@style/Theme.FujiWifiApp.NoActionBar"
             android:exported="false" />
@@ -83,10 +86,6 @@
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
 

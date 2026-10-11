@@ -3,9 +3,15 @@
  <androidx.appcompat.widget.Toolbar android:id="@+id/ui_toolbar" android:layout_width="0dp" android:layout_height="wrap_content" android:minHeight="56dp" app:titleTextColor="@color/ui_text" app:contentInsetStart="20dp" app:contentInsetEnd="16dp" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"/>
  <ScrollView android:layout_width="0dp" android:layout_height="0dp" android:fillViewport="true" app:layout_constraintTop_toBottomOf="@id/ui_toolbar" app:layout_constraintBottom_toTopOf="@id/workbench_nav" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent">
  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-  <TextView style="@style/UiBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="更改自动保存。下载选项用于下一次任务。" android:layout_marginBottom="16dp"/>
+  <TextView style="@style/UiBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="你的创作偏好，以及照片导入设置。" android:layout_marginBottom="16dp"/>
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/ui_card" android:padding="20dp" android:layout_marginBottom="12dp">
-   <TextView style="@style/UiTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下载与浏览" android:textSize="17sp"/>
+   <TextView style="@style/UiTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="创作偏好" android:textSize="17sp"/>
+   <Button android:id="@+id/settings_frame_author" style="@style/UiTextButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="默认署名"/>
+   <Button android:id="@+id/settings_frame_quality" style="@style/UiTextButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="默认导出画质"/>
+   <TextView style="@style/UiBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="边框、纸色和布局会记住上一次的选择。原照片始终保留。" android:textSize="12sp"/>
+  </LinearLayout>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/ui_card" android:padding="20dp" android:layout_marginBottom="12dp">
+   <TextView style="@style/UiTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="相机导入与浏览" android:textSize="17sp"/>
    <androidx.appcompat.widget.SwitchCompat android:id="@+id/setting_skip" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="默认跳过已保存文件" android:textSize="14sp"/>
    <androidx.appcompat.widget.SwitchCompat android:id="@+id/setting_private" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="保存到应用目录" android:textSize="14sp"/>
    <TextView style="@style/UiBody" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="关闭：保存到系统相册或文件。开启：仅保存在本应用目录，卸载应用时会移除。" android:textSize="12sp"/>

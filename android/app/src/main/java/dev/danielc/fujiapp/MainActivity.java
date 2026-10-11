@@ -76,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
         setSupportActionBar(findViewById(R.id.ui_toolbar));
-        getSupportActionBar().setTitle(R.string.app_name);
+        getSupportActionBar().setTitle("相机导入");
         getSupportActionBar().setSubtitle(null);
         WorkbenchNav.attach(this,WorkbenchNav.CAMERA);
         setupWorkbench();
@@ -265,8 +265,11 @@ public class MainActivity extends AppCompatActivity {
 
         Backend.discoveryThread(MainActivity.this);
         if(wifi.selectedNetworkHandle()>0&&Backend.cGetKillSwitch())wifi.onWiFiSelectAvailable.run();
+        handleCameraEntry();
     }
 
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleCameraEntry();}
+    private void handleCameraEntry(){if(getIntent().getBooleanExtra("show_lan",false)){getIntent().removeExtra("show_lan");findViewById(R.id.advanced_panel).setVisibility(View.VISIBLE);Backend.startLanDiscovery(this);}}
     private final Handler dashboardUi=new Handler(Looper.getMainLooper());
     private final Runnable dashboardTick=new Runnable(){public void run(){renderDashboard();dashboardUi.postDelayed(this,1000);}};
     private void setupWorkbench(){findViewById(R.id.saved_camera_reconnect).setOnClickListener(v->bluetooth.reconnectSaved());for(int i=0;i<3;i++){final int mode=i;findViewById(new int[]{R.id.connect_mode_0,R.id.connect_mode_1,R.id.connect_mode_2}[i]).setOnClickListener(v->{MySettings.setSetting(this,"connection_mode_tab",mode);renderConnectionMode(mode);});}renderConnectionMode(MySettings.getSetting(this,"connection_mode_tab",0));findViewById(R.id.advanced_connection).setOnClickListener(v->{View panel=findViewById(R.id.advanced_panel);boolean opening=panel.getVisibility()!=View.VISIBLE;panel.setVisibility(opening?View.VISIBLE:View.GONE);if(opening)Backend.startLanDiscovery(this);else Backend.suspendLanDiscovery();});findViewById(R.id.dashboard_gallery).setOnClickListener(v->WorkbenchNav.open(this,WorkbenchNav.GALLERY));findViewById(R.id.dashboard_info).setOnClickListener(v->{CameraDetails.show(this,Gallery.currentInfo());});findViewById(R.id.dashboard_disconnect).setOnClickListener(v->Gallery.disconnectFrom(this));}
@@ -276,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
         dashboardUi.postDelayed(()->{if(isFinishing()||isDestroyed()||BackgroundCamera.running||MySettings.getSetting(this,"background_enabled",0)!=1||!BackgroundCamera.hasPermission(this)||!Backend.cGetKillSwitch()||blockConnect||(bluetooth!=null&&bluetooth.isBusy())||(wifi!=null&&wifi.isSelecting()))return;BackgroundCamera.start(this);},1000);
     }
     @Override protected void onPause(){dashboardUi.removeCallbacksAndMessages(null);super.onPause();}
-    @Override public void onBackPressed(){moveTaskToBack(true);}
+    @Override public void onBackPressed(){WorkbenchNav.open(this,WorkbenchNav.CREATE);}
     private void openConnectedGallery(){handler.post(()->{if(manualDisconnected||disconnecting||ConnectionState.shared.snapshot().ended)return;Gallery.discardPreviousSession();startActivity(new Intent(this,Gallery.class));});}
 
     void backgroundImage() {

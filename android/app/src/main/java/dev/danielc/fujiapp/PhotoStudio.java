@@ -28,16 +28,20 @@ public final class PhotoStudio extends AppCompatActivity {
     static void open(android.content.Context c, Uri source, String name) {
         c.startActivity(new Intent(c,PhotoStudio.class).putExtra("target",source.toString()).putExtra("name",name));
     }
+    static void open(android.content.Context c, Uri source, String name, int style) {
+        c.startActivity(new Intent(c,PhotoStudio.class).putExtra("target",source.toString()).putExtra("name",name).putExtra("style",style));
+    }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         android.content.SharedPreferences prefs=getSharedPreferences("frame_studio",0);
         options.style=Math.max(0,Math.min(PhotoFrame.NAMES.length-1,prefs.getInt("style",8)));options.paper=Math.max(0,Math.min(4,prefs.getInt("paper",0)));options.spacing=Math.max(3,Math.min(15,prefs.getInt("spacing",6)));options.sidebarRight=prefs.getBoolean("sidebar_right",false);options.blur=Math.max(1,Math.min(8,prefs.getInt("blur",4)));options.corners=Math.max(0,Math.min(36,prefs.getInt("corners",18)));options.shadow=Math.max(0,Math.min(32,prefs.getInt("shadow",18)));options.author=prefs.getString("author","");options.parameters=prefs.getBoolean("parameters",true);
         if(!prefs.getBoolean("light_frames_seen",false))options.style=8;
+        int requested=getIntent().getIntExtra("style",-1);if(state==null&&requested>=0&&requested<PhotoFrame.NAMES.length)options.style=requested;
         if(state!=null)options.title=state.getString("title","");
         String target=getIntent().getStringExtra("target"); name=getIntent().getStringExtra("name");
         if(target==null||name==null){finish();return;} source=Uri.parse(target);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(android.graphics.Color.rgb(16,22,20));
-        androidx.appcompat.widget.Toolbar bar=new androidx.appcompat.widget.Toolbar(this);bar.setTitle("边框工作室");bar.setSubtitle("光影边框 · 双指缩放预览");root.addView(bar);
+        androidx.appcompat.widget.Toolbar bar=new androidx.appcompat.widget.Toolbar(this);bar.setTitle("边框工作室");bar.setSubtitle("编辑作品 · 双指缩放预览");root.addView(bar);
         preview=new com.jsibbold.zoomage.ZoomageView(this);preview.setScaleType(ImageView.ScaleType.FIT_CENTER);preview.setPadding(dp(16),dp(16),dp(16),dp(16));preview.setBackground(background(0xff26312b,18));LinearLayout.LayoutParams imageParams=new LinearLayout.LayoutParams(-1,dp(330));imageParams.setMargins(dp(14),dp(8),dp(14),dp(8));root.addView(preview,imageParams);
         LinearLayout tabs=new LinearLayout(this);tabs.setPadding(dp(14),dp(6),dp(14),dp(6));root.addView(tabs);
         ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(18),dp(12),dp(18),dp(24));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
