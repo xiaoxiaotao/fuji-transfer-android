@@ -76,3 +76,7 @@ sh tests/run-ptp-init-recovery.sh
 保留上游 GPL v2 许可文本与原作者版权，参见 [LICENSE](LICENSE)。依赖各自许可保留于原目录。部分协议适配参考 MIT 许可的 petabyt/libfuji，说明位于 [third_party/notices](third_party/notices)。本项目为社区开发应用，与富士官方无隶属关系。
 
 不提交 SDK、Gradle 缓存、设备日志、个人照片、Wi-Fi 密码和签名密钥。`downloads/` 仅保存明确发布、已签名并验证的安装包；其他构建产物不提交。
+
+## iPhone 版本
+
+iOS 首版在 `codex/ios-fuji-gallery` 分支开发，面向 iPhone 15 Pro Max，使用 SwiftUI 和共用富士协议。工程、安装方式与验证边界见 [iOS 说明](ios/README.md)。需完整 Xcode 和 Apple 真机签名；iPhone 实测通过后再合并 main。

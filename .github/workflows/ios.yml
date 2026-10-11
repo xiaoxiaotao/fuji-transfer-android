@@ -1,0 +1,31 @@
+name: iOS build and recovery tests
+on:
+  push:
+    branches: [codex/ios-fuji-gallery]
+    paths: ['ios/**', 'lib/**', '.github/workflows/ios.yml']
+  pull_request:
+    branches: [main]
+    paths: ['ios/**', 'lib/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify shared native protocol bridge
+        run: sh ios/tools/native-check.sh
+      - name: Verify recovery logic
+        run: swift test --package-path ios
+      - name: Build iPhone application without signing
+        run: xcodebuild -project ios/FujiGallery.xcodeproj -scheme FujiGallery -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+      - name: Build simulator application without signing
+        run: xcodebuild -project ios/FujiGallery.xcodeproj -scheme FujiGallery -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/build-simulator CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FujiGallery-iOS-unsigned
+          path: |
+            ios/build/Build/Products/Debug-iphoneos/FujiGallery.app
+            ios/build-simulator/Build/Products/Debug-iphonesimulator/FujiGallery.app
+          if-no-files-found: error

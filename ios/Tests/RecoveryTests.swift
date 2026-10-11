@@ -1,0 +1,13 @@
+import XCTest
+@testable import FujiGalleryCore
+final class RecoveryTests: XCTestCase {
+    func photo(_ handle: UInt32 = 7) -> CameraPhoto { CameraPhoto(id: handle, filename: "DSCF0001.JPG", compressedSize: 100, dateCreated: "20261011T110000", format: 0x3801) }
+    func ledger() throws -> TransferLedger { try TransferLedger(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("tasks.json")) }
+    func testUsesCurrentHandle() throws { let l = try ledger(); let old = try l.add(camera: "A", photos: [photo()])[0]; try l.set(old.id, state: .stopped); let r = l.recoveryPhotos(camera: "A", current: [photo(99)]); XCTAssertEqual(r.matched.map(\.id), [99]); XCTAssertEqual(r.missing, 0) }
+    func testAmbiguousOrMissingNeverGuesses() throws { let l = try ledger(); _ = try l.add(camera: "A", photos: [photo()]); XCTAssertEqual(l.recoveryPhotos(camera: "A", current: [photo(2), photo(3)]).missing, 1); XCTAssertEqual(l.recoveryPhotos(camera: "A", current: []).missing, 1) }
+    func testOtherCameraAndUnknownIdentity() throws { let l = try ledger(); _ = try l.add(camera: "A", photos: [photo()]); XCTAssertTrue(l.pending(camera: "B").isEmpty); XCTAssertTrue(l.pending(camera: nil).isEmpty); XCTAssertNil(photo().identity(camera: nil)) }
+    func testSavedSuppressesPreviousFailure() throws { let l = try ledger(); let r = try l.add(camera: "A", photos: [photo()])[0]; try l.set(r.id, state: .failed); let new = try l.add(camera: "A", photos: [photo(9)])[0]; try l.set(new.id, state: .saved, assetID: "asset"); XCTAssertTrue(l.pending(camera: "A").isEmpty); XCTAssertTrue(l.alreadySaved(photo(33), camera: "A")) }
+    func testRestartRestoresPreparedQueue() throws { let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("tasks.json"); let l = try TransferLedger(url: url); let rows = try l.add(camera: "A", photos: [photo(), photo(8)]); try l.set(rows[0].id, state: .downloading); let reopened = try TransferLedger(url: url); XCTAssertEqual(reopened.records.map(\.state), [.stopped, .stopped]) }
+    func testUnsafeNamesAndMissingMetadata() { var p = photo(); for name in ["../x", "/x", "a\\b", ".", "..", ""] { p.filename = name; XCTAssertNil(p.safeFilename); XCTAssertNil(p.identity(camera: "A")) }; p = photo(); p.dateCreated = ""; XCTAssertNil(p.identity(camera: "A")) }
+    func testCorruptionDoesNotSilentlyEraseHistory() throws { let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try Data("invalid".utf8).write(to: url); XCTAssertThrowsError(try TransferLedger(url: url)); XCTAssertEqual(try Data(contentsOf: url), Data("invalid".utf8)) }
+}

@@ -30,3 +30,12 @@ desktop/build
 .env.*
 !*.example
 *.hprof
+
+# iOS local build and signing files
+**/.build/
+**/DerivedData/
+**/xcuserdata/
+*.ipa
+*.xcarchive/
+*.mobileprovision
+*.p12
