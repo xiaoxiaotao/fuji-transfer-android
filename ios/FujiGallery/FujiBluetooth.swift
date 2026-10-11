@@ -9,7 +9,7 @@ struct CameraCandidate: Identifiable {
 }
 struct CameraHotspot { let ssid: String; let password: String; let camera: String }
 
-@MainActor final class FujiBluetooth: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
+@MainActor final class FujiBluetooth: NSObject, ObservableObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate {
     @Published var candidates: [CameraCandidate] = []
     @Published var message = "打开相机配对注册后，扫描附近相机"
     @Published var scanning = false
@@ -27,9 +27,13 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     override init() { super.init(); central = CBCentralManager(delegate: self, queue: .main) }
     func scan() {
         guard central.state == .poweredOn else { message = "请在设置中开启蓝牙并允许 Fuji图库 使用蓝牙"; return }
-        candidates.removeAll(); scanning = true; message = "正在扫描，请在相机上进入配对注册"
+        candidates.removeAll(); addPairedCamera(); scanning = true; message = "正在扫描，请在相机上进入配对注册"
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         Task { try? await Task.sleep(nanoseconds: 15_000_000_000); stopScan() }
+    }
+    private func addPairedCamera() {
+        guard let value = UserDefaults.standard.string(forKey: "pairedCamera"), let id = UUID(uuidString: value), let p = central.retrievePeripherals(withIdentifiers: [id]).first else { return }
+        if !candidates.contains(where: { $0.id == id }) { candidates.append(CameraCandidate(id: id, name: p.name ?? "已配对富士相机", peripheral: p)) }
     }
     func stopScan() { central.stopScan(); scanning = false }
     func disconnect() {
@@ -88,6 +92,7 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
         return CameraHotspot(ssid: hotspotName, password: String(decoding: secret.prefix(while: { $0 != 0 }), as: UTF8.self), camera: candidate.id.uuidString)
     }
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        if central.state == .poweredOn { addPairedCamera() }
         if central.state != .poweredOn { stopScan(); finish(error: CameraFailure(message: "蓝牙不可用，请检查权限和开关")); message = "蓝牙不可用，请检查权限和开关" }
     }
     func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {

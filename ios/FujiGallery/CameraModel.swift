@@ -111,7 +111,8 @@ import Photos
     func saveSelection() { startTransfer(recovery: false) }
     func recover() { startTransfer(recovery: true) }
     private func startTransfer(recovery: Bool) {
-        guard connected && !busy, let ledger else { return }
+        guard connected && !busy else { return }
+        guard let ledger else { detail = "下载记录不可用，请先导出日志排查；原有记录未删除"; return }
         if recovery && camera == nil { detail = "跨连接恢复需要从同一台已配对蓝牙相机连接"; return }
         let handles = recovery ? photos : photos.filter { selection.contains($0) }
         if !recovery && handles.isEmpty { return }

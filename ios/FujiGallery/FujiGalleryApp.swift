@@ -1,14 +1,14 @@
 import SwiftUI
 import UIKit
 
-@main struct FujiGalleryApp: App {
+@main @MainActor struct FujiGalleryApp: App {
     @StateObject private var model = CameraModel()
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup { RootView(model: model).tint(Color(red: 0.08, green: 0.38, blue: 0.29)).onChange(of: phase) { if $0 == .background { model.backgrounded() } } }
     }
 }
-struct RootView: View {
+@MainActor struct RootView: View {
     @ObservedObject var model: CameraModel
     @AppStorage("debugUI") private var debugUI = false
     @AppStorage("cameraIP") private var ip = "192.168.0.1"
@@ -83,7 +83,7 @@ struct RootView: View {
     }
     private func status(_ state: TransferStatus) -> String { switch state { case .waiting: return "等待保存"; case .downloading: return "正在下载"; case .saved: return "已保存"; case .failed: return "下载失败"; case .stopped: return "未完成，可核对恢复"; case .needsReview: return "保存结果待确认，请先检查系统相册" } }
 }
-struct BluetoothPanel: View {
+@MainActor struct BluetoothPanel: View {
     @ObservedObject var model: CameraModel
     @ObservedObject var bluetooth: FujiBluetooth
     let ip: String

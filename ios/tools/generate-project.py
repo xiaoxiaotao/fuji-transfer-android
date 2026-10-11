@@ -17,11 +17,13 @@ for path in sources:
     ref=add('ref:'+path, '{isa = PBXFileReference; lastKnownFileType = '+('sourcecode.swift' if path.endswith('.swift') else 'sourcecode.c')+'; path = '+q(path)+'; sourceTree = SOURCE_ROOT; }')
     refs.append(ref); builds.append(add('build:'+path,'{isa = PBXBuildFile; fileRef = '+ref+'; }'))
 asset=add('assets','{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = FujiGallery/Assets.xcassets; sourceTree = SOURCE_ROOT; }')
+privacy=add('privacy','{isa = PBXFileReference; lastKnownFileType = text.xml; path = FujiGallery/PrivacyInfo.xcprivacy; sourceTree = SOURCE_ROOT; }')
+privacyBuild=add('privacyBuild','{isa = PBXBuildFile; fileRef = '+privacy+'; }');refs.append(privacy)
 assetBuild=add('assetsBuild','{isa = PBXBuildFile; fileRef = '+asset+'; }');refs.append(asset)
 product=add('product','{isa = PBXFileReference; explicitFileType = wrapper.application; path = FujiGallery.app; sourceTree = BUILT_PRODUCTS_DIR; }')
 group=add('group','{isa = PBXGroup; children = ('+','.join(refs+[product])+'); sourceTree = "<group>"; }')
 sourcePhase=add('sources','{isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ('+','.join(builds)+'); runOnlyForDeploymentPostprocessing = 0; }')
-resourcePhase=add('resources','{isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ('+assetBuild+'); runOnlyForDeploymentPostprocessing = 0; }')
+resourcePhase=add('resources','{isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ('+assetBuild+','+privacyBuild+'); runOnlyForDeploymentPostprocessing = 0; }')
 frameworkPhase=add('frameworks','{isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; }')
 settings={'SDKROOT':'iphoneos','IPHONEOS_DEPLOYMENT_TARGET':'16.0','SWIFT_VERSION':'5.0','CLANG_ENABLE_MODULES':'YES','CLANG_ENABLE_OBJC_ARC':'YES','GCC_C_LANGUAGE_STANDARD':'gnu11','HEADER_SEARCH_PATHS':'"$(SRCROOT)/../lib" "$(SRCROOT)/../lib/libpict/src" "$(SRCROOT)/../lib/fp/src"','PRODUCT_BUNDLE_IDENTIFIER':'com.xiaoxiaotao.fujigallery','PRODUCT_NAME':'$(TARGET_NAME)','INFOPLIST_FILE':'FujiGallery/Info.plist','SWIFT_OBJC_BRIDGING_HEADER':'FujiGallery/BridgingHeader.h','CODE_SIGN_ENTITLEMENTS':'FujiGallery/FujiGallery.entitlements','CODE_SIGN_STYLE':'Automatic','TARGETED_DEVICE_FAMILY':'1','MARKETING_VERSION':'0.1.0','CURRENT_PROJECT_VERSION':'1','ASSETCATALOG_COMPILER_APPICON_NAME':'AppIcon','ENABLE_USER_SCRIPT_SANDBOXING':'YES','SUPPORTED_PLATFORMS':'iphoneos iphonesimulator','SUPPORTS_MACCATALYST':'NO'}
 configs=[]
