@@ -31,7 +31,7 @@ final class DownloadTaskCenter {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final TasksAdapter adapter=new TasksAdapter();
     private TextView summary,empty;
-    private Button retry,remaining,stop,more;
+    private Button retry,remaining,stop,more,recover;
     private int limit=60;
     private boolean loading,closed;
     private final androidx.lifecycle.LifecycleEventObserver lifecycle;
@@ -56,8 +56,9 @@ final class DownloadTaskCenter {
         retry.setOnClickListener(v->{if(gallery!=null)gallery.retryTasks(DownloadTask.State.FAILED);refresh();});
         remaining.setOnClickListener(v->{if(gallery!=null)gallery.retryTasks(DownloadTask.State.STOPPED);refresh();});
         LinearLayout.LayoutParams half=new LinearLayout.LayoutParams(0,dp(48),1);half.setMarginEnd(dp(8));actions.addView(retry,half);actions.addView(remaining,new LinearLayout.LayoutParams(0,dp(48),1));box.addView(actions);
+        recover=button("恢复上次未完成下载");recover.setOnClickListener(v->{if(gallery!=null)gallery.recoverPreviousDownloads();});box.addView(recover,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48)));
         stop=button("停止剩余下载");stop.setOnClickListener(v->{if(gallery!=null)gallery.requestTransferStop();else if(DownloadTransfer.current!=null)DownloadTransfer.current.stop=true;summary.setText("当前文件完成后停止剩余任务…");});LinearLayout.LayoutParams stopParams=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48));stopParams.topMargin=dp(8);box.addView(stop,stopParams);
-        TextView hint=label("关闭此窗口不会停止下载。历史连接的任务请在图库重新选择。",11);hint.setTextColor(androidx.core.content.ContextCompat.getColor(activity,R.color.ui_muted));hint.setPadding(0,dp(12),0,0);box.addView(hint);
+        TextView hint=label("关闭此窗口不会停止下载。重连同一已配对相机后，可核对并恢复未完成下载。旧版未记录照片身份的任务需要重新选择。",11);hint.setTextColor(androidx.core.content.ContextCompat.getColor(activity,R.color.ui_muted));hint.setPadding(0,dp(12),0,0);box.addView(hint);
         dialog.setContentView(box);dialog.setOnDismissListener(d->{closed=true;handler.removeCallbacksAndMessages(null);worker.shutdown();if(activity instanceof androidx.lifecycle.LifecycleOwner)((androidx.lifecycle.LifecycleOwner)activity).getLifecycle().removeObserver(lifecycle);});
         if(activity instanceof androidx.lifecycle.LifecycleOwner)((androidx.lifecycle.LifecycleOwner)activity).getLifecycle().addObserver(lifecycle);
         dialog.show();
@@ -71,6 +72,7 @@ final class DownloadTaskCenter {
                 List<DownloadTasks.Row> rows=store.page(Long.MAX_VALUE,limit+1);
                 int failures=gallery==null?0:store.countRetryable(gallery.downloadSession,DownloadTask.State.FAILED);
                 int stopped=gallery==null?0:store.countRetryable(gallery.downloadSession,DownloadTask.State.STOPPED);
+                int pending=gallery==null?0:store.recoverable(gallery.recoveryCamera(),gallery.downloadSession).size();
                 boolean hasMore=rows.size()>limit;if(hasMore)rows.remove(rows.size()-1);
                 handler.post(()->{
                     if(closed)return;loading=false;
@@ -78,6 +80,7 @@ final class DownloadTaskCenter {
                     empty.setText(rows.isEmpty()?"还没有下载任务。先在图库选择照片并下载。":"");empty.setVisibility(rows.isEmpty()?View.VISIBLE:View.GONE);
                     more.setVisibility(hasMore?View.VISIBLE:View.GONE);
                     boolean ready=gallery!=null&&gallery.canStartTransfers();
+                    recover.setText("恢复上次未完成 · "+pending);recover.setEnabled(ready&&pending>0);recover.setAlpha(recover.isEnabled()?1f:0.4f);
                     retry.setText("重试失败 · "+failures);retry.setEnabled(ready&&failures>0);retry.setAlpha(retry.isEnabled()?1f:0.4f);
                     remaining.setText("继续剩余 · "+stopped);remaining.setEnabled(ready&&stopped>0);remaining.setAlpha(remaining.isEnabled()?1f:0.4f);
                     DownloadTransfer.Run service=DownloadTransfer.current;

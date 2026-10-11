@@ -165,12 +165,20 @@ public class MainActivity extends AppCompatActivity {
         if(wifi==null)wifi = new WiFiComm();
         wifi.handler=handler;
         wifi.setConnectivityManager((ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE));
+        wifi.onCameraNetworkLost=()->{
+            if(manualDisconnected||disconnecting)return;
+            String reason="相机 Wi-Fi 已断开，请重新连接；未完成下载记录已保留";
+            ConnectionState.shared.error(ConnectionState.Step.WIFI,reason);
+            DownloadTransfer.Run run=DownloadTransfer.current;if(run!=null&&run.running){run.stop=true;run.error=reason;}
+            Frontend.print(reason);
+            if(!Backend.cGetKillSwitch()&&Backend.cGetTransport()==10)Backend.reportErrorNonBlock(Backend.PTP_IO_ERR,reason);
+        };
         wifi.startNetworkListeners(getApplicationContext());
 
         wifi.onWiFiSelectCancel = new Runnable() {
             @Override
             public void run() {
-                if(manualDisconnected)return;
+                if(manualDisconnected||disconnecting||wifi.cameraNetworkLost())return;
                 ConnectionState.shared.error(ConnectionState.Step.WIFI,"相机 Wi-Fi 未连接或已断开，请重新连接");
                 if(BackgroundCamera.running&&Backend.cGetKillSwitch()){Frontend.print("图库 Wi-Fi 已释放，后台蓝牙继续待机");return;}
                 if(!Backend.cGetKillSwitch()&&Backend.cGetTransport()==10){Gallery.stopAll();Backend.reportErrorNonBlock(Backend.PTP_IO_ERR,"相机 Wi-Fi 已断开，请重新连接");}
@@ -269,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
     }
     @Override protected void onPause(){dashboardUi.removeCallbacksAndMessages(null);super.onPause();}
     @Override public void onBackPressed(){moveTaskToBack(true);}
-    private void openConnectedGallery(){handler.post(()->{if(manualDisconnected||disconnecting)return;Gallery.discardPreviousSession();startActivity(new Intent(this,Gallery.class));});}
+    private void openConnectedGallery(){handler.post(()->{if(manualDisconnected||disconnecting||ConnectionState.shared.snapshot().ended)return;Gallery.discardPreviousSession();startActivity(new Intent(this,Gallery.class));});}
 
     void backgroundImage() {
         try {
@@ -449,8 +457,10 @@ public class MainActivity extends AppCompatActivity {
         Backend.suspendLanDiscovery();
         Frontend.print(getString(R.string.connecting));
         int rc;
+        if(wifi!=null)wifi.trackCameraNetwork(dev.danielc.common.WiFiComm.getNetworkHandle());
         try{rc=Backend.cTryConnectWiFi(extraTmout);}finally{blockConnect=false;}
-        if (rc != 0) return rc;
+        if (rc != 0){if(wifi!=null)wifi.clearCameraNetwork();return rc;}
+        if(wifi!=null&&wifi.cameraNetworkLost()){Backend.reportErrorNonBlock(Backend.PTP_IO_ERR,"连接期间相机 Wi-Fi 已断开");return Backend.PTP_IO_ERR;}
         Backend.cancelDiscoveryThread();
         Frontend.print("已建立连接");
         ConnectionState.shared.update(ConnectionState.Step.SESSION,ConnectionState.Status.CONNECTING,"网络已连接，正在验证相机会话");

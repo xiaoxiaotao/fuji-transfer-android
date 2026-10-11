@@ -139,6 +139,8 @@ public class Gallery extends AppCompatActivity {
     void requestTransferStop(){cancelRemaining=true;DownloadTransfer.Run run=DownloadTransfer.current;if(run!=null&&run.session.equals(downloadSession))run.stop=true;}
     boolean isStopRequested(){return cancelRemaining;}
     String transferSummary(){DownloadTransfer.Run run=DownloadTransfer.current;if(run!=null&&run.session.equals(downloadSession))return run.summary()+(run.meter==null?"":"\n"+run.meter.detail());return batchRunning?"本次 "+batchTotal+" 张 · 已保存 "+completed+" · 跳过 "+skipped+" · 失败 "+failed:"已保存 "+completed+" 张 · 失败 "+failed+" 张";}
+    String recoveryCamera(){return cameraIdentity;}
+    void recoverPreviousDownloads(){if(!canStartTransfers()||cameraIdentity==null)return;new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("恢复未完成下载").setMessage("核对当前相机照片后继续保存未完成文件。已保存文件会跳过，无法确认的照片保留记录。中断文件会重新完整下载。").setPositiveButton("核对并继续",(d,w)->{if(!canStartTransfers())return;pauseAll();try{DownloadTransfer.startRecovery(this,downloadSession,cameraIdentity,objectHandles);syncTransfer();}catch(RuntimeException e){resumeAll();android.widget.Toast.makeText(this,"暂时无法恢复下载，请稍后重试",android.widget.Toast.LENGTH_LONG).show();}}).setNegativeButton("取消",null).show();}
     void retryTasks(DownloadTask.State state){if(canStartTransfers())beginBatch(null,state);}
     static void notifyBatchProgress(int percent) {DownloadTransfer.progress(percent);}
     private void startSelectedDownload() {

@@ -58,10 +58,17 @@ public class WiFiComm {
     }
     public boolean isSelecting(){return selecting;}
     public long selectedNetworkHandle(){Network selected=foundWiFiDevice;return selected==null?NOT_AVAILABLE:selected.getNetworkHandle();}
+    private final CameraNetworkWatch cameraNetwork=new CameraNetworkWatch();
+    public void trackCameraNetwork(long handle){cameraNetwork.track(handle);}
+    public void clearCameraNetwork(){cameraNetwork.clear();}
+    public boolean cameraNetworkLost(){return cameraNetwork.isLost();}
+    public Runnable onCameraNetworkLost;
+    private void notifyCameraLost(Network network){if(network!=null&&cameraNetwork.lost(network.getNetworkHandle()))run(onCameraNetworkLost);}
     public Object selectionToken(){return lastCallback;}
 
     /** Release only the app-owned hotspot request, after PTP CloseSession has finished. */
     public synchronized void releaseCameraNetwork(){
+        cameraNetwork.clear();
         ConnectivityManager.NetworkCallback previous=lastCallback;
         lastCallback=null;foundWiFiDevice=null;selectedAddressReady=false;selecting=false;
         if(previous!=null&&cm!=null){try{cm.unregisterNetworkCallback(previous);}catch(IllegalArgumentException|SecurityException ignored){}}
@@ -152,6 +159,7 @@ public class WiFiComm {
                   synchronized(WiFiComm.this){
                     if(lastCallback!=this||!network.equals(foundWiFiDevice))return;
                     selecting=false;foundWiFiDevice = null;selectedAddressReady=false;
+                    notifyCameraLost(network);
                     run(onWiFiSelectCancel);
                   }
                 }
@@ -189,6 +197,7 @@ public class WiFiComm {
             public void onLost(Network network) {
                 Log.e(TAG, "Lost network\n");
                 if(network.equals(wifiDevice))wifiDevice = null;
+                notifyCameraLost(network);
             }
             @Override
             public void onUnavailable() {
