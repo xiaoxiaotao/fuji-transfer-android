@@ -1,0 +1,1 @@
+36ec3a5003598368f284c479b9e6993332d96aeb4dbcfeef095b4173847bdccb  fudge-0.2.3-zh.50-transfer-progress-arm64.apk
