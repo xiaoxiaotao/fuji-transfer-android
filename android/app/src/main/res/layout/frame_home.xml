@@ -1,11 +1,10 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/creation_root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:background="@color/ui_background">
-    <ScrollView android:id="@+id/creation_scroll" android:layout_width="match_parent" android:layout_height="0dp"
-        android:layout_weight="1" android:fillViewport="true" android:clipToPadding="false">
-        <LinearLayout android:id="@+id/creation_content" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:padding="20dp"/>
-    </ScrollView>
-    <include layout="@layout/workbench_nav" android:id="@+id/workbench_nav" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginHorizontal="12dp" android:layout_marginBottom="8dp"/>
-</LinearLayout>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+ android:id="@+id/creation_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/ui_background">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+  <LinearLayout android:id="@+id/creation_header" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="64dp" android:gravity="center_vertical" android:paddingHorizontal="18dp"/>
+  <ScrollView android:id="@+id/creation_scroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:clipToPadding="false">
+   <LinearLayout android:id="@+id/creation_content" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="16dp" android:paddingTop="8dp" android:paddingBottom="110dp"/>
+  </ScrollView>
+ </LinearLayout>
+ <include layout="@layout/workbench_nav" android:id="@+id/workbench_nav" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:layout_marginHorizontal="28dp" android:layout_marginBottom="18dp"/>
+</FrameLayout>

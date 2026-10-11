@@ -39,7 +39,7 @@ final class LightFrame {
   return out;
  }
  private static void text(Canvas c,Paint p,String value,float x,float y,float max,float size,int color,boolean bold){p.setColor(color);p.setTextSize(Math.max(1,size));p.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));p.setTextAlign(Paint.Align.LEFT);c.drawText(android.text.TextUtils.ellipsize(value,new android.text.TextPaint(p),Math.max(1,max),android.text.TextUtils.TruncateAt.END).toString(),x,y,p);}
- private static Bitmap blur(Bitmap source,int amount){
+ static Bitmap blur(Bitmap source,int amount){
   float scale=96f/Math.max(source.getWidth(),source.getHeight());Bitmap tiny=Bitmap.createScaledBitmap(source,Math.max(1,Math.round(source.getWidth()*scale)),Math.max(1,Math.round(source.getHeight()*scale)),true);
   Bitmap result=tiny.copy(Bitmap.Config.ARGB_8888,true);if(tiny!=source)tiny.recycle();int w=result.getWidth(),h=result.getHeight();int[] pixels=new int[w*h],temp=new int[w*h];result.getPixels(pixels,0,w,0,0,w,h);
   int radius=Math.max(1,amount);for(int pass=0;pass<3;pass++){for(int y=0;y<h;y++)for(int x=0;x<w;x++){int red=0,green=0,blue=0,n=0;for(int dx=-radius;dx<=radius;dx++){int v=pixels[y*w+Math.max(0,Math.min(w-1,x+dx))];red+=Color.red(v);green+=Color.green(v);blue+=Color.blue(v);n++;}temp[y*w+x]=Color.rgb(red/n,green/n,blue/n);}for(int y=0;y<h;y++)for(int x=0;x<w;x++){int red=0,green=0,blue=0,n=0;for(int dy=-radius;dy<=radius;dy++){int v=temp[Math.max(0,Math.min(h-1,y+dy))*w+x];red+=Color.red(v);green+=Color.green(v);blue+=Color.blue(v);n++;}pixels[y*w+x]=Color.rgb(red/n,green/n,blue/n);}}

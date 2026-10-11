@@ -44,7 +44,7 @@ public class FrameHomeTest {
   ActivityController<FrameHome> controller=Robolectric.buildActivity(FrameHome.class).create();FrameHome home=controller.get();View root=home.findViewById(R.id.creation_root);
   root.measure(View.MeasureSpec.makeMeasureSpec(640,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1176,View.MeasureSpec.EXACTLY));root.layout(0,0,640,1176);
   LinearLayout nav=root.findViewById(R.id.workbench_nav);assertEquals(4,nav.getChildCount());assertTrue(nav.getBottom()<=root.getHeight());assertTrue(nav.getChildAt(0).isSelected());
-  assertEquals("创作，当前页面",nav.getChildAt(0).getContentDescription());assertEquals("相机",nav.getChildAt(2).getContentDescription());assertTrue(root.findViewById(R.id.creation_scroll).getHeight()>600);
+  assertEquals("首页，当前页面",nav.getChildAt(0).getContentDescription());assertEquals("相机",nav.getChildAt(2).getContentDescription());assertTrue(root.findViewById(R.id.creation_scroll).getHeight()>600);
   assertTrue(root.findViewById(R.id.creation_pick).isEnabled());controller.destroy();
  }
  @Test public void selectedTemplateIsPassedToEditorAndReopeningImportDoesNotRepeat(){
