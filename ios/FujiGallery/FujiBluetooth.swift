@@ -66,6 +66,9 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     }
     func prepare(_ candidate: CameraCandidate) async throws -> CameraHotspot {
         disconnect(); peripheral = candidate.peripheral; candidate.peripheral.delegate = self
+        if candidate.peripheral.state != .disconnected {
+            _ = try await wait("disconnect") { central.cancelPeripheralConnection(candidate.peripheral) }
+        }
         message = "正在连接蓝牙；请确认相机与 iPhone 的配对代码"
         _ = try await wait("connect") { central.connect(candidate.peripheral) }
         _ = try await wait("services") { candidate.peripheral.discoverServices(nil) }
@@ -103,7 +106,7 @@ struct CameraHotspot { let ssid: String; let password: String; let camera: Strin
     }
     func centralManager(_ central: CBCentralManager, didConnect p: CBPeripheral) { guard p === peripheral else { return }; finish(event: "connect") }
     func centralManager(_ central: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) { guard p === peripheral else { return }; finish(error: error ?? CameraFailure(message: "蓝牙连接失败")) }
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) { guard p === peripheral else { return }; finish(error: error ?? CameraFailure(message: "相机蓝牙已断开")); message = "蓝牙已断开；已建立的 Wi-Fi 会话可继续使用" }
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) { guard p === peripheral else { return }; if expected == "disconnect" && pending != nil { finish(event: "disconnect"); return }; finish(error: error ?? CameraFailure(message: "相机蓝牙已断开")); message = "蓝牙已断开；已建立的 Wi-Fi 会话可继续使用" }
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) { guard p === peripheral else { return }; finish(event: "services", error: error) }
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) { guard p === peripheral else { return }; finish(event: "characteristics:\(s.uuid)", error: error) }
     func peripheral(_ p: CBPeripheral, didUpdateValueFor c: CBCharacteristic, error: Error?) { guard p === peripheral else { return }; finish(event: "read:\(c.uuid)", value: c.value ?? Data(), error: error) }
