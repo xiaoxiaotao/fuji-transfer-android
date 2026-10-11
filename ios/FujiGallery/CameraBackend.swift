@@ -25,6 +25,13 @@ final class RunLog {
     }
 }
 
+private final class WorkCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func cancel() { lock.lock(); value = true; lock.unlock() }
+    var cancelled: Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
+
 final class CameraBackend {
     static let shared = CameraBackend()
     private let queue = DispatchQueue(label: "fuji.protocol", qos: .userInitiated)
@@ -36,9 +43,15 @@ final class CameraBackend {
     private func updateProgress(_ done: UInt64, _ total: UInt64) { progressLock.lock(); completed = done; expected = total; progressLock.unlock() }
     func progress() -> Double { progressLock.lock(); defer { progressLock.unlock() }; return expected == 0 ? 0 : min(1, Double(completed) / Double(expected)) }
     private func perform<T>(_ body: @escaping () throws -> T) async throws -> T {
-        try await withCheckedThrowingContinuation { continuation in
-            queue.async { do { continuation.resume(returning: try body()) } catch { continuation.resume(throwing: error) } }
-        }
+        let cancellation = WorkCancellation()
+        return try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async {
+                    do { if cancellation.cancelled { throw CancellationError() }; continuation.resume(returning: try body()) }
+                    catch { continuation.resume(throwing: error) }
+                }
+            }
+        }, onCancel: { cancellation.cancel() })
     }
     private func check(_ result: Int32, _ operation: String) throws { if result != 0 { throw CameraFailure(message: "\(operation)失败（\(result)），请检查相机热点和连接权限后重连") } }
     func connect(ip: String, protocolMode: Int) async throws {

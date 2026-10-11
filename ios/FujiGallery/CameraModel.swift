@@ -23,6 +23,7 @@ import Photos
     private var hotspot: String?
     private var loadingThumbs = Set<UInt32>()
     init() {
+        RunLog.shared.write("Fuji图库 iOS 0.1.0 启动")
         do {
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FujiGallery")
             ledger = try TransferLedger(url: root.appendingPathComponent("transfers.json")); refreshRecords()
@@ -104,8 +105,11 @@ import Photos
     func loadThumbnail(_ handle: UInt32) async {
         guard connected && !busy && thumbnails[handle] == nil && !loadingThumbs.contains(handle) else { return }
         let token = session; loadingThumbs.insert(handle); defer { loadingThumbs.remove(handle) }
-        do { let data = try await backend.thumbnail(handle); if token == session && connected { thumbnails[handle] = data } }
-        catch { if token == session && connected && !busy { await fail(error) } }
+        do { let data = try await backend.thumbnail(handle); if token == session && connected && !Task.isCancelled {
+                thumbnails[handle] = data
+                if thumbnails.count > 256, let oldest = thumbnails.keys.first(where: { $0 != handle }) { thumbnails.removeValue(forKey: oldest) }
+            } }
+        catch { if !(error is CancellationError) && token == session && connected && !busy { await fail(error) } }
     }
     func stopRemaining() { stopRequested = true; transferText = "当前照片完成后停止剩余下载" }
     func saveSelection() { startTransfer(recovery: false) }

@@ -46,21 +46,22 @@ public final class TransferLedger {
             if records[i].state == .downloading { records[i].state = .stopped }
             if records[i].state == .waiting { records[i].state = .stopped }
         }
-        try persist()
+        try persist(records)
     }
-    private func persist() throws {
+    private func persist(_ proposed: [TransferRecord]) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(records).write(to: url, options: .atomic)
+        try JSONEncoder().encode(proposed).write(to: url, options: .atomic)
     }
     public func add(camera: String?, photos: [CameraPhoto]) throws -> [TransferRecord] {
         let added = photos.map { TransferRecord(camera: camera, photo: $0) }
-        records.append(contentsOf: added); try persist(); return added
+        let next = records + added; try persist(next); records = next; return added
     }
     public func set(_ id: UUID, state: TransferStatus, error: String = "", assetID: String? = nil) throws {
         guard let i = records.firstIndex(where: { $0.id == id }) else { return }
-        records[i].state = state; records[i].error = error
-        if let assetID { records[i].assetID = assetID }
-        try persist()
+        var next = records
+        next[i].state = state; next[i].error = error
+        if let assetID { next[i].assetID = assetID }
+        try persist(next); records = next
     }
     public func alreadySaved(_ photo: CameraPhoto, camera: String?) -> Bool {
         guard let key = photo.identity(camera: camera) else { return false }

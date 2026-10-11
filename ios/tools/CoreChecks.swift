@@ -12,6 +12,10 @@ import Foundation
         try reopened.set(first.id, state: .saved, assetID: "asset"); precondition(reopened.alreadySaved(photo(9), camera: "A")); precondition(reopened.pending(camera: "A").isEmpty)
         var unsafe = photo(); unsafe.filename = "../a"; precondition(unsafe.safeFilename == nil && unsafe.identity(camera: "A") == nil)
         try Data("invalid".utf8).write(to: url); do { _ = try TransferLedger(url: url); fatalError("corruption erased") } catch { let original = try Data(contentsOf: url); precondition(original == Data("invalid".utf8)) }
-        print("7 iOS core recovery checks passed")
+        let broken = root.appendingPathComponent("blocked"), brokenLedger = try TransferLedger(url: broken.appendingPathComponent("tasks.json"))
+        let row = try brokenLedger.add(camera: "A", photos: [photo()])[0]
+        try FileManager.default.removeItem(at: broken); try Data("blocked".utf8).write(to: broken)
+        do { try brokenLedger.set(row.id, state: .saved); fatalError("write failure ignored") } catch { precondition(brokenLedger.records[0].state == .waiting) }
+        print("8 iOS core recovery checks passed")
     }
 }

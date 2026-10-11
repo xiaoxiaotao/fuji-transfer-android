@@ -10,4 +10,12 @@ final class RecoveryTests: XCTestCase {
     func testRestartRestoresPreparedQueue() throws { let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("tasks.json"); let l = try TransferLedger(url: url); let rows = try l.add(camera: "A", photos: [photo(), photo(8)]); try l.set(rows[0].id, state: .downloading); let reopened = try TransferLedger(url: url); XCTAssertEqual(reopened.records.map(\.state), [.stopped, .stopped]) }
     func testUnsafeNamesAndMissingMetadata() { var p = photo(); for name in ["../x", "/x", "a\\b", ".", "..", ""] { p.filename = name; XCTAssertNil(p.safeFilename); XCTAssertNil(p.identity(camera: "A")) }; p = photo(); p.dateCreated = ""; XCTAssertNil(p.identity(camera: "A")) }
     func testCorruptionDoesNotSilentlyEraseHistory() throws { let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try Data("invalid".utf8).write(to: url); XCTAssertThrowsError(try TransferLedger(url: url)); XCTAssertEqual(try Data(contentsOf: url), Data("invalid".utf8)) }
+    func testWriteFailureKeepsPreviousState() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let l = try TransferLedger(url: root.appendingPathComponent("tasks.json")); let first = try l.add(camera: "A", photos: [photo()])[0]
+        try FileManager.default.removeItem(at: root); try Data("blocked".utf8).write(to: root)
+        XCTAssertThrowsError(try l.set(first.id, state: .saved)); XCTAssertEqual(l.records[0].state, .waiting)
+        XCTAssertThrowsError(try l.add(camera: "A", photos: [photo(88)])); XCTAssertEqual(l.records.count, 1)
+    }
 }
