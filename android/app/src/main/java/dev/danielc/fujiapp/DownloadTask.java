@@ -6,6 +6,7 @@ final class DownloadTask {
     final long id;
     final int handle;
     volatile String name;
+    String camera,photoKey;
     private State state;
     private int progress, attempts;
     private String error;
