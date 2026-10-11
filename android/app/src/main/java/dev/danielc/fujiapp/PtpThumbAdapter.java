@@ -121,11 +121,11 @@ public class PtpThumbAdapter extends ThumbAdapter {
     @Override public boolean imageLongClickHandler(ImageViewHolder holder) {
         ((Gallery)context).beginSelection(holder.handle); return true;
     }
-    public void refreshSelection() { for(ImageViewHolder holder:holders)bindSelection(holder); }
+    public void refreshSelection() { for(ImageViewHolder holder:holders)bindSelection(holder);for(HeaderHolder holder:headers)bindHeader(holder); }
     private void bindSelection(ImageViewHolder holder) {
         Gallery gallery=(Gallery)context;
         holder.label.setVisibility(gallery.detailsMode()?android.view.View.VISIBLE:android.view.View.GONE);
-        holder.itemView.findViewById(R.id.download_badge).setVisibility(gallery.isSaved(holder.handle)?android.view.View.VISIBLE:android.view.View.GONE);
+        android.widget.TextView status=holder.itemView.findViewById(R.id.download_badge);status.setVisibility(android.view.View.VISIBLE);status.setText(gallery.isSaved(holder.handle)?"✓ 原文件":"预览");status.setContentDescription(gallery.isSaved(holder.handle)?"原文件已保存到手机":"相机预览，原文件尚未保存");
         boolean selected=gallery.isSelected(holder.handle);
         holder.itemView.findViewById(R.id.selection_border).setVisibility(selected?android.view.View.VISIBLE:android.view.View.GONE);
         android.widget.TextView check=holder.itemView.findViewById(R.id.selection_check);
@@ -140,7 +140,7 @@ public class PtpThumbAdapter extends ThumbAdapter {
         req.ctx = context;
         req.holder = holder;
         req.position = position;
-        req.object_id = ((Gallery)context).visibleHandle(position);
+        req.object_id = rows.get(position).handle;
         holder.handle = req.object_id;
         bindSelection(holder);
         android.graphics.Bitmap cached=cachedThumbnail(req.object_id);
@@ -166,11 +166,18 @@ public class PtpThumbAdapter extends ThumbAdapter {
         }
     }
 
-    private int[] order=new int[0];
-    public void updateOrder(){int[] next=((Gallery)context).visibleSnapshot();final int[] previous=order;order=next;androidx.recyclerview.widget.DiffUtil.calculateDiff(new androidx.recyclerview.widget.DiffUtil.Callback(){public int getOldListSize(){return previous.length;}public int getNewListSize(){return next.length;}public boolean areItemsTheSame(int a,int b){return previous[a]==next[b];}public boolean areContentsTheSame(int a,int b){return a==b;}},false).dispatchUpdatesTo(this);}
-    @Override public long getItemId(int position){return Integer.toUnsignedLong(((Gallery)context).visibleHandle(position));}
-    @Override
-    public int getItemCount() {
-        return ((Gallery)context).visibleCount();
-    }
+    private java.util.List<PhotoGroups.Row> rows=new java.util.ArrayList<>();
+    boolean isHeader(int position){return position>=0&&position<rows.size()&&rows.get(position).header;}
+    int photoHandle(int position){return position>=0&&position<rows.size()&&!isHeader(position)?rows.get(position).handle:0;}
+    void selectDragRange(int from,int to){Gallery gallery=(Gallery)context;for(int i=Math.min(from,to);i<=Math.max(from,to)&&i<rows.size();i++)if(i>=0&&!isHeader(i))gallery.addSelection(rows.get(i).handle);gallery.refreshSelectionUi();}
+    private final java.util.List<HeaderHolder> headers=new java.util.ArrayList<>();
+    private void bindHeader(HeaderHolder holder){if(holder.row==null)return;PhotoGroups.Row row=holder.row;int selected=0;for(int handle:row.members)if(((Gallery)context).isSelected(handle))selected++;holder.label.setText(row.date+"   ·   "+row.members.length+" 张"+(selected==0?"": " · 已选 "+selected)+"    "+(selected==row.members.length?"取消本组":"选择本组"));}
+    private static final class HeaderHolder extends ImageViewHolder {PhotoGroups.Row row;HeaderHolder(android.widget.TextView view){super(view);label=view;}}
+    @Override public int getItemViewType(int position){return isHeader(position)?1:0;}
+    @Override public ImageViewHolder onCreateViewHolder(android.view.ViewGroup parent,int type){if(type==0)return super.onCreateViewHolder(parent,type);android.widget.TextView label=new android.widget.TextView(context);label.setTextColor(androidx.core.content.ContextCompat.getColor(context,R.color.ui_text));label.setTextSize(15);int pad=Math.round(12*context.getResources().getDisplayMetrics().density);label.setPadding(pad,pad*2,pad,pad);label.setLayoutParams(new androidx.recyclerview.widget.RecyclerView.LayoutParams(-1,-2));return new HeaderHolder(label);}
+    @Override public void onBindViewHolder(ImageViewHolder holder,int position){if(holder instanceof HeaderHolder){PhotoGroups.Row row=rows.get(position);HeaderHolder header=(HeaderHolder)holder;header.row=row;if(!headers.contains(header))headers.add(header);bindHeader(header);holder.itemView.setOnClickListener(v->((Gallery)context).selectGroup(row.members));return;}super.onBindViewHolder(holder,position);}
+    @Override public void onViewRecycled(ImageViewHolder holder){if(holder instanceof HeaderHolder){headers.remove((HeaderHolder)holder);((HeaderHolder)holder).row=null;holder.itemView.setOnClickListener(null);return;}super.onViewRecycled(holder);}
+    public void updateOrder(){Gallery gallery=(Gallery)context;final java.util.List<PhotoGroups.Row> previous=rows,next=PhotoGroups.build(gallery.visibleSnapshot(),gallery.photoDates(),gallery.groupDates());rows=next;androidx.recyclerview.widget.DiffUtil.calculateDiff(new androidx.recyclerview.widget.DiffUtil.Callback(){public int getOldListSize(){return previous.size();}public int getNewListSize(){return next.size();}public boolean areItemsTheSame(int a,int b){return previous.get(a).id()==next.get(b).id();}public boolean areContentsTheSame(int a,int b){return java.util.Arrays.equals(previous.get(a).members,next.get(b).members);}},false).dispatchUpdatesTo(this);}
+    @Override public long getItemId(int position){return rows.get(position).id();}
+    @Override public int getItemCount(){return rows.size();}
 }

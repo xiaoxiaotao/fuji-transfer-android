@@ -51,6 +51,7 @@ public class Gallery extends AppCompatActivity {
     private final java.util.Set<Integer> savedHandles=java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Integer,Boolean>());
     private final java.util.concurrent.ExecutorService receiptWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private int formatFilter, sortOrder;
+    private boolean groupDates=true,dragSelecting;
     private String dateFilter="";
     private boolean onlyNew, forceDownload;
     private RecyclerView recyclerView;
@@ -88,7 +89,7 @@ public class Gallery extends AppCompatActivity {
     private DownloadTransfer.Run appliedRun;
     private final java.util.Set<Integer> appliedSaved=new java.util.HashSet<>();
     private static Snapshot connectionSnapshot;
-    private static final class Snapshot {String session;int[] handles;CameraInfo info;java.util.Map<Integer,JSONObject> metadata;int format,sort;String date;boolean onlyNew;int[] selected;}
+    private static final class Snapshot {String session;int[] handles;CameraInfo info;java.util.Map<Integer,JSONObject> metadata;int format,sort;String date;boolean onlyNew,groupDates;int[] selected;}
     private final Runnable filterRefresh=()->applyFilters();
     private final Runnable transferPoll=new Runnable(){public void run(){if(!alive)return;syncTransfer();handler.postDelayed(this,400);}};
     volatile DownloadTask activeTask;
@@ -112,6 +113,11 @@ public class Gallery extends AppCompatActivity {
         if(batchRunning || objectHandles==null)return;
         selecting=true;selection.toggle(handle);updateSelectionUi();
     }
+    boolean groupDates(){return groupDates;}
+    java.util.Map<Integer,String> photoDates(){java.util.Map<Integer,String> dates=new java.util.HashMap<>();for(java.util.Map.Entry<Integer,JSONObject> entry:metadata.entrySet())dates.put(entry.getKey(),entry.getValue().optString("dateCreated"));return dates;}
+    void addSelection(int handle){if(!batchRunning){selecting=true;selection.selectAll(new int[]{handle});}}
+    void refreshSelectionUi(){updateSelectionUi();}
+    void selectGroup(int[] members){if(batchRunning)return;selecting=true;boolean all=true;for(int handle:members)if(!selection.contains(handle)){all=false;break;}for(int handle:members){if(all)selection.remove(handle);else selection.selectAll(new int[]{handle});}updateSelectionUi();}
     private void updateSelectionUi() {
         ((TextView)findViewById(R.id.gallery_count)).setText(selecting?"已选择 "+selection.size()+" 张":objectHandles==null?"正在读取照片…":(visibleHandles.length==objectHandles.length?objectHandles.length+" 张照片":"筛选结果 "+visibleHandles.length+" / "+objectHandles.length+" 张"));
         ((Button)findViewById(R.id.filter_photos)).setText(formatFilter!=0||sortOrder!=0||onlyNew||!dateFilter.isEmpty()?"筛选 · 已启用":"筛选排序");
@@ -124,7 +130,7 @@ public class Gallery extends AppCompatActivity {
         if(!batchRunning){progress.setIndeterminate(objectHandles==null);progress.setVisibility(objectHandles==null?View.VISIBLE:View.GONE);}
         Button download=findViewById(R.id.download_selected);
         download.setText(batchRunning?"正在下载…":"下载 "+selection.size()+" 张");download.setEnabled(selection.size()>0&&!batchRunning);download.setAlpha(download.isEnabled()?1f:0.35f);
-        ((TextView)findViewById(R.id.transfer_caption)).setText(batchRunning?"正在保存到手机":selecting?"已选 "+selection.size()+" 个 · "+selectedSize(selection.snapshot()):"长按照片进入多选，点击照片查看大图");
+        ((TextView)findViewById(R.id.transfer_caption)).setText(batchRunning?"正在保存到手机":selecting?"已选 "+selection.size()+" 个 · "+selectedSize(selection.snapshot()):"长按进入多选，滑动连续选片；点击日期选择整组");
         findViewById(R.id.table_button).setEnabled(!selecting&&!batchRunning);
         findViewById(R.id.import_button).setEnabled(!batchRunning);
         findViewById(R.id.gallery_button).setEnabled(!batchRunning);
@@ -179,13 +185,13 @@ public class Gallery extends AppCompatActivity {
         try{receiptWorker.execute(()->{String key=PhotoReceipts.key(cameraIdentity==null?downloadSession:cameraIdentity,handle,info);if(PhotoReceipts.exists(this,key))savedHandles.add(handle);handler.post(()->{if(isDestroyed())return;if(imageAdapter!=null)imageAdapter.refreshSelection();handler.removeCallbacks(filterRefresh);handler.postDelayed(filterRefresh,250);});});}catch(java.util.concurrent.RejectedExecutionException ignored){}
     }
     private void applyFilters(){
-        if(objectHandles==null||batchRunning)return;
+        if(objectHandles==null||batchRunning||dragSelecting)return;
         java.util.Map<Integer,JSONObject> snapshot=new java.util.HashMap<>(metadata);
         java.util.ArrayList<Integer> filtered=new java.util.ArrayList<>();
         for(int handle:objectHandles){JSONObject info=snapshot.get(handle);if(PhotoFilter.matches(formatFilter,dateFilter,onlyNew,info==null?"":info.optString("filename"),info==null?"":info.optString("dateCreated"),savedHandles.contains(handle)))filtered.add(handle);}
         if(sortOrder!=0)java.util.Collections.sort(filtered,(a,b)->{JSONObject ia=snapshot.get(a),ib=snapshot.get(b);String va=ia==null?"":ia.optString(sortOrder==3?"filename":"dateCreated"),vb=ib==null?"":ib.optString(sortOrder==3?"filename":"dateCreated");if(va.isEmpty()!=vb.isEmpty())return va.isEmpty()?1:-1;int c=va.compareTo(vb);if(c==0)c=Integer.compareUnsigned(a,b);return sortOrder==1?-c:c;});
         int[] next=new int[filtered.size()];for(int i=0;i<next.length;i++)next[i]=filtered.get(i);
-        if(!java.util.Arrays.equals(next,visibleHandles)){visibleHandles=next;if(imageAdapter!=null)imageAdapter.updateOrder();}
+        visibleHandles=next;if(imageAdapter!=null)imageAdapter.updateOrder();
         updateSelectionUi();
     }
     private void showFilters(){
@@ -196,8 +202,9 @@ public class Gallery extends AppCompatActivity {
         sort.setAdapter(new android.widget.ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"相机原始顺序","拍摄时间 · 新到旧","拍摄时间 · 旧到新","文件名"}));sort.setSelection(sortOrder);box.addView(sort);
         android.widget.EditText date=new android.widget.EditText(this);date.setSingleLine(true);date.setHint("拍摄日期 YYYYMMDD，留空显示全部");date.setText(dateFilter);date.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);box.addView(date);
         android.widget.CheckBox fresh=new android.widget.CheckBox(this);fresh.setText("仅显示未下载");fresh.setChecked(onlyNew);box.addView(fresh);
+        android.widget.CheckBox groups=new android.widget.CheckBox(this);groups.setText("按拍摄日期分组（最新日期在前）");groups.setChecked(groupDates);box.addView(groups);
         TextView note=new TextView(this);note.setText("照片信息会逐步读取，筛选结果会随读取更新。已选照片保留；全选只选择当前结果。");box.addView(note);
-        androidx.appcompat.app.AlertDialog dialog=new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("筛选与排序").setView(box).setPositiveButton("应用",null).setNeutralButton("重置",(d,w)->{formatFilter=sortOrder=0;dateFilter="";onlyNew=false;applyFilters();}).setNegativeButton("取消",null).create();dialog.show();dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{String input=date.getText().toString().trim();if(!PhotoFilter.validDate(input)){date.setError("请填写有效的 YYYYMMDD");return;}formatFilter=formats.getSelectedItemPosition();sortOrder=sort.getSelectedItemPosition();dateFilter=input;onlyNew=fresh.isChecked();applyFilters();dialog.dismiss();});
+        androidx.appcompat.app.AlertDialog dialog=new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("筛选与排序").setView(box).setPositiveButton("应用",null).setNeutralButton("重置",(d,w)->{formatFilter=sortOrder=0;dateFilter="";onlyNew=false;groupDates=true;applyFilters();}).setNegativeButton("取消",null).create();dialog.show();dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{String input=date.getText().toString().trim();if(!PhotoFilter.validDate(input)){date.setError("请填写有效的 YYYYMMDD");return;}formatFilter=formats.getSelectedItemPosition();sortOrder=sort.getSelectedItemPosition();dateFilter=input;onlyNew=fresh.isChecked();groupDates=groups.isChecked();applyFilters();dialog.dismiss();});
     }
     private void showRange(){
         if(!canStartTransfers()||visibleCount()==0)return;
@@ -279,7 +286,17 @@ public class Gallery extends AppCompatActivity {
     void createGallery() {
         if(!alive)return;
         recyclerView = new RecyclerView(this);
-        recyclerView.setLayoutManager(new GridLayoutManager(this, GRID_SIZE));
+        GridLayoutManager grid=new GridLayoutManager(this,GRID_SIZE);recyclerView.setLayoutManager(grid);
+        grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup(){public int getSpanSize(int position){return imageAdapter!=null&&imageAdapter.isHeader(position)?GRID_SIZE:1;}});
+        recyclerView.addOnItemTouchListener(new RecyclerView.SimpleOnItemTouchListener(){
+            int anchor=-1,anchorHandle;float downX,downY;
+            int position(android.view.MotionEvent event){View child=recyclerView.findChildViewUnder(event.getX(),event.getY());return child==null?-1:recyclerView.getChildAdapterPosition(child);}
+            public boolean onInterceptTouchEvent(RecyclerView view,android.view.MotionEvent event){
+                if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN){anchor=position(event);anchorHandle=imageAdapter==null?0:imageAdapter.photoHandle(anchor);downX=event.getX();downY=event.getY();}
+                if(event.getActionMasked()==android.view.MotionEvent.ACTION_MOVE&&selecting&&!batchRunning&&anchorHandle!=0&&imageAdapter!=null&&Math.hypot(event.getX()-downX,event.getY()-downY)>android.view.ViewConfiguration.get(Gallery.this).getScaledTouchSlop()){anchor=-1;for(int i=0;i<imageAdapter.getItemCount();i++)if(!imageAdapter.isHeader(i)&&imageAdapter.photoHandle(i)==anchorHandle){anchor=i;break;}if(anchor<0)return false;dragSelecting=true;view.getParent().requestDisallowInterceptTouchEvent(true);onTouchEvent(view,event);return true;}return false;
+            }
+            public void onTouchEvent(RecyclerView view,android.view.MotionEvent event){if(event.getActionMasked()==android.view.MotionEvent.ACTION_MOVE){int target=position(event);if(target>=0)imageAdapter.selectDragRange(anchor,target);int edge=WorkbenchNav.dp(Gallery.this,48);if(event.getY()<edge)view.scrollBy(0,-WorkbenchNav.dp(Gallery.this,12));else if(event.getY()>view.getHeight()-edge)view.scrollBy(0,WorkbenchNav.dp(Gallery.this,12));}if(event.getActionMasked()==android.view.MotionEvent.ACTION_UP||event.getActionMasked()==android.view.MotionEvent.ACTION_CANCEL){dragSelecting=false;anchor=-1;view.getParent().requestDisallowInterceptTouchEvent(false);applyFilters();}}
+        });
 
         imageAdapter = new PtpThumbAdapter(this);
         imageAdapter.updateOrder();
@@ -411,7 +428,7 @@ public class Gallery extends AppCompatActivity {
         renderChips();updateSelectionUi();
         Snapshot restored=connectionSnapshot;
         if((savedInstanceState!=null||getIntent().getBooleanExtra("resume_transfer",false))&&restored!=null&&!Backend.cGetKillSwitch()){
-            downloadSession=restored.session;objectHandles=restored.handles;visibleHandles=objectHandles;cameraInfo=restored.info;metadata.putAll(restored.metadata);formatFilter=restored.format;sortOrder=restored.sort;dateFilter=restored.date;onlyNew=restored.onlyNew;selection.selectAll(restored.selected);selecting=selection.size()>0;renderCameraCard();setupPage(Page.GALLERY);applyFilters();startPingThread();
+            downloadSession=restored.session;objectHandles=restored.handles;visibleHandles=objectHandles;cameraInfo=restored.info;metadata.putAll(restored.metadata);formatFilter=restored.format;sortOrder=restored.sort;dateFilter=restored.date;onlyNew=restored.onlyNew;groupDates=restored.groupDates;selection.selectAll(restored.selected);selecting=selection.size()>0;renderCameraCard();setupPage(Page.GALLERY);applyFilters();startPingThread();
         }else if(savedInstanceState!=null||getIntent().getBooleanExtra("resume_transfer",false)){android.widget.Toast.makeText(this,"相机会话已失效，请重新连接",android.widget.Toast.LENGTH_LONG).show();finish();return;}
         else{connectionSnapshot=null;startGalleryThread();}
         handler.post(transferPoll);
@@ -474,7 +491,7 @@ public class Gallery extends AppCompatActivity {
     }
 
     private void renderCameraCard(){CameraInfo info=cameraInfo;if(info!=null)((TextView)findViewById(R.id.camera_status)).setText("● 已连接  ·  "+info.link()+"  ·  相机信息 ›");}
-    private void saveSnapshot(){if(objectHandles==null||cameraInfo==null)return;Snapshot state=new Snapshot();state.session=downloadSession;state.handles=objectHandles.clone();state.info=cameraInfo;state.metadata=metadata;state.format=formatFilter;state.sort=sortOrder;state.date=dateFilter;state.onlyNew=onlyNew;state.selected=selection.snapshot();connectionSnapshot=state;}
+    private void saveSnapshot(){if(objectHandles==null||cameraInfo==null)return;Snapshot state=new Snapshot();state.session=downloadSession;state.handles=objectHandles.clone();state.info=cameraInfo;state.metadata=metadata;state.format=formatFilter;state.sort=sortOrder;state.date=dateFilter;state.onlyNew=onlyNew;state.groupDates=groupDates;state.selected=selection.snapshot();connectionSnapshot=state;}
     private void startPingThread(){new Thread(()->{while(alive&&!Backend.cGetKillSwitch()){DownloadTransfer.Run transfer=DownloadTransfer.current;if(RemoteSession.isBusy()||(transfer!=null&&transfer.running)){try{Thread.sleep(1000);}catch(InterruptedException e){return;}continue;}int rc=Backend.cPtpFujiPing();if(!alive)return;if(rc!=0){requestTransferStop();handler.post(()->{if(alive)fail(Backend.PTP_IO_ERR,"相机没有响应");});return;}try{Thread.sleep(1000);}catch(InterruptedException e){return;}}},"camera-events").start();}
     @Override protected void onSaveInstanceState(Bundle out){saveSnapshot();super.onSaveInstanceState(out);}
     @Override public void onDestroy(){
