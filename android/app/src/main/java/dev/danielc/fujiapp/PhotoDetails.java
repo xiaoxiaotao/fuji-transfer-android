@@ -10,7 +10,7 @@ import java.util.List;
 /** Reads only the downloaded original. Missing fields are never inferred from the preview. */
 final class PhotoDetails {
     final List<String> lines = new ArrayList<>();
-    String camera = "", exposure = "", lens="", takenAt="", aperture="", shutter="", iso="";
+    String camera = "", exposure = "", lens="", takenAt="", aperture="", shutter="", iso="", focalLength="";
     static PhotoDetails read(Context context, Uri uri, String name) throws IOException {
         PhotoDetails result = new PhotoDetails();
         result.lines.add("文件：" + name);
@@ -31,7 +31,7 @@ final class PhotoDetails {
             add(result, "相机", result.camera); add(result, "镜头", lens); add(result, "拍摄时间", time);
             add(result, "光圈", aperture.isEmpty() ? "" : "f/" + aperture);
             add(result, "快门", shutter.isEmpty() ? "" : shutter + " s"); add(result, "ISO", iso);
-            add(result, "焦距", value(exif, "FocalLength"));
+            result.focalLength=focalLength(value(exif,"FocalLength"));add(result, "焦距", result.focalLength);
             add(result, "尺寸", value(exif, "ImageWidth") + " × " + value(exif, "ImageLength"));
             result.exposure = (aperture.isEmpty() ? "" : "f/" + aperture + "  ")
                 + (shutter.isEmpty() ? "" : shutter + "s  ") + (iso.isEmpty() ? "" : "ISO " + iso);
@@ -39,6 +39,7 @@ final class PhotoDetails {
         }
         return result;
     }
+    static String focalLength(String raw){if(raw.isEmpty())return "";try{double value;if(raw.contains("/")){String[] parts=raw.split("/");value=Double.parseDouble(parts[0])/Double.parseDouble(parts[1]);}else value=Double.parseDouble(raw);if(!Double.isFinite(value)||value<=0)return "";return String.format(java.util.Locale.ROOT,"%.1f",value).replaceAll("\\.0$", "")+" mm";}catch(RuntimeException error){return "";}}
     static String shutter(String raw) {
         try {
             double seconds;

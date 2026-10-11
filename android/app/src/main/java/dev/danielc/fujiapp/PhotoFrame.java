@@ -7,9 +7,9 @@ final class PhotoFrame {
         "双栏参数","居中参数","侧边署名","档案标签","旅行明信片","美术馆装裱","悬浮印相","双层卡纸","细黑边","呼吸留白","方形装裱","宽幅留白",
         "黑边即影","糖果相纸","石灰相纸","齿孔负片","幻灯片","接触印相","电影字幕","双语字幕","竖幅电影","旅行票根","登机纪念","摄影日记","杂志封面",
         "毛玻璃悬浮","雾光留白","朦胧即影","色采圆点","色采条带","方形头像","邮票纪念","日落渐变","暗调画廊","技术档案",
-        "左上参数","左下参数","右上参数","右下参数","个人名片","签名白边","参数卡片","雾光日期","印象右留白","三图故事","双图对白","六格接触印样","撕边相纸","胶带手账","相册角贴","金线装裱","建筑蓝图","横线笔记","棋盘相纸","霓虹夜景","展览海报","典藏编号"};
+        "左上参数","左下参数","右上参数","右下参数","个人名片","签名白边","参数卡片","雾光日期","印象右留白","三图故事","双图对白","六格接触印样","撕边相纸","胶带手账","相册角贴","金线装裱","建筑蓝图","横线笔记","棋盘相纸","霓虹夜景","展览海报","典藏编号","富士拍摄档案","富士暗房卡","富士配方签"};
     static final String[] CATEGORIES={"水印参数","印象装裱","光影模糊","简约白边","胶片相纸","电影故事","旅行出版","色彩创意"};
-    static final int[][] GROUPS={{0,1,11,12,14,45,46,47,48,49,50,51,52},{3,13,16,17,18,44,54,60,61,66,67},{8,9,36,37,38,53},{2,19,20,21,22},{4,5,23,24,25,26,27,28,58,59},{7,29,30,31,55,56,57},{6,15,32,33,34,35,63},{10,39,40,41,42,43,62,64,65}};
+    static final int[][] GROUPS={{0,1,11,12,14,45,46,47,48,49,50,51,52,68,69,70},{3,13,16,17,18,44,54,60,61,66,67},{8,9,36,37,38,53},{2,19,20,21,22},{4,5,23,24,25,26,27,28,58,59},{7,29,30,31,55,56,57},{6,15,32,33,34,35,63},{10,39,40,41,42,43,62,64,65}};
     static int category(int style){for(int i=0;i<GROUPS.length;i++)for(int value:GROUPS[i])if(value==style)return i;return 0;}
     static int requiredPhotos(int style){return style==55?3:style==56?2:style==57?6:1;}
     static int defaultPaper(int style){return style==1||style==19||style==23||style==26||style==27||style==28||style==44?2:style==24?3:style==25?4:1;}
@@ -17,8 +17,8 @@ final class PhotoFrame {
     static final int[] PAPERS={Color.rgb(248,246,239),Color.WHITE,Color.rgb(24,28,26),Color.rgb(225,230,220),Color.rgb(233,221,207)};
     static final class Options {
         int style=8, paper=0, spacing=6, blur=4, corners=18, shadow=18; boolean parameters=true,sidebarRight;
-        String title="", author="";
-        Options copy(){Options o=new Options();o.style=style;o.paper=paper;o.spacing=spacing;o.blur=blur;o.corners=corners;o.shadow=shadow;o.parameters=parameters;o.sidebarRight=sidebarRight;o.title=title;o.author=author;return o;}
+        String title="", author="", filmNote="";
+        Options copy(){Options o=new Options();o.style=style;o.paper=paper;o.spacing=spacing;o.blur=blur;o.corners=corners;o.shadow=shadow;o.parameters=parameters;o.sidebarRight=sidebarRight;o.title=title;o.author=author;o.filmNote=filmNote;return o;}
     }
     static Bitmap render(Bitmap photo,PhotoDetails details,int style){Options o=new Options();o.style=style;o.paper=style==1?2:1;o.spacing=4;return render(photo,details,o);}
     static Bitmap render(Bitmap photo,PhotoDetails details,Options o){

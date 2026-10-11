@@ -13,6 +13,7 @@ final class ExtendedFrame {
     private ExtendedFrame(Bitmap out,float unit,int paper){canvas=new Canvas(out);u=unit;boolean dark=Color.red(paper)+Color.green(paper)+Color.blue(paper)<330;ink=dark?0xfff1efe8:0xff272d30;muted=dark?0xffb8c1c5:0xff747d83;}
 
     static Bitmap render(Bitmap photo,PhotoDetails d,PhotoFrame.Options o,List<Bitmap> extras){
+        if(o.style>=68)return FujiPhotoCard.render(photo,d,o);
         if(o.style>=58)return EditorialFrame.render(photo,d,o);
         int style=o.style,w=photo.getWidth(),h=photo.getHeight();float u=w/1000f;
         int m=Math.max(1,Math.round(w*o.spacing/100f)),top=m,foot=Math.round(w*.20f),side=0;
