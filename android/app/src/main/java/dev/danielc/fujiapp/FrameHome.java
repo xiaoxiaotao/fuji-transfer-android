@@ -23,9 +23,8 @@ public final class FrameHome extends AppCompatActivity {
     private static final int PICK_PHOTO=501;
     private static final int[][] GROUPS=PhotoFrame.GROUPS;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
+    private final ExecutorService imports=Executors.newSingleThreadExecutor();
     private final List<Bitmap> samples=new ArrayList<>(), recentBitmaps=new ArrayList<>();
-    private final List<ImageView> sampleViews=new ArrayList<>();
-    private final List<Integer> sampleStyles=new ArrayList<>();
     private ImageView banner;
     private LinearLayout content, recent;
     private TextView recentNote;
@@ -63,12 +62,8 @@ public final class FrameHome extends AppCompatActivity {
         for(int group=0;group<GROUPS.length;group++){
             final int initialStyle=GROUPS[group][0];LinearLayout section=section(names[group],GROUPS[group].length+" 款",24);anchors[group]=section;
             ImageButton upload=new ImageButton(this);upload.setImageResource(R.drawable.ui_upload);upload.setColorFilter(0xffdddddd);upload.setBackgroundColor(0x00000000);upload.setContentDescription("选择照片制作"+names[group]);section.addView(upload,new LinearLayout.LayoutParams(dp(40),dp(40)));upload.setOnClickListener(v->{pendingStyle=initialStyle;pickPhoto();});
-            HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setClipToPadding(false);LinearLayout row=new LinearLayout(this);scroll.addView(row);content.addView(scroll,spacing(-1,-2,10));
-            for(int style:GROUPS[group]){
-                LinearLayout card=column();ImageView sample=new ImageView(this);sample.setScaleType(ImageView.ScaleType.FIT_CENTER);card.addView(sample,new LinearLayout.LayoutParams(-1,dp(138)));sampleViews.add(sample);sampleStyles.add(style);
-                TextView caption=text(PhotoFrame.NAMES[style],14,0xffe0e1e2);card.addView(caption,spacing(-1,-2,9));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(164),-2);cp.setMarginEnd(dp(14));row.addView(card,cp);
-                card.setContentDescription(PhotoFrame.NAMES[style]+"，选择照片制作");card.setFocusable(true);card.setOnClickListener(v->{pendingStyle=style;pickPhoto();});card.setOnLongClickListener(v->{chooseSource(style);return true;});
-            }
+            androidx.recyclerview.widget.RecyclerView row=new androidx.recyclerview.widget.RecyclerView(this);row.setLayoutManager(new androidx.recyclerview.widget.LinearLayoutManager(this,androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL,false));row.setNestedScrollingEnabled(false);row.setHasFixedSize(true);row.setItemAnimator(null);row.setAdapter(new FrameSamples(GROUPS[group]));content.addView(row,spacing(-1,dp(172),10));
+
         }
         section("最近照片","本地",24).setOnClickListener(v->WorkbenchNav.open(this,WorkbenchNav.LIBRARY));
         recentNote=text("正在读取可用照片…",12,0xffb5b8ba);content.addView(recentNote,spacing(-1,-2,8));recent=new LinearLayout(this);content.addView(recent,spacing(-1,-2,12));
@@ -83,19 +78,17 @@ public final class FrameHome extends AppCompatActivity {
     }
     private void chooseSource(int style){pendingStyle=style;new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("制作 · "+PhotoFrame.NAMES[style]).setItems(new String[]{"从手机相册选择","使用已导入照片","从富士相机获取照片"},(dialog,index)->{if(index==0)pickPhoto();else if(index==1)pickImported(style);else WorkbenchNav.open(this,WorkbenchNav.CAMERA);}).setNegativeButton("取消",null).show();}
     private void pickImported(int style){startActivity(new Intent(this,FileGallery.class).putExtra("frame_style",style));}
-    private void pickPhoto(){try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),PICK_PHOTO);}catch(android.content.ActivityNotFoundException e){Toast.makeText(this,"系统相册不可用，请使用已导入照片",Toast.LENGTH_LONG).show();}}
+    private void pickPhoto(){try{startActivityForResult(PhotoPicker.create(this,1),PICK_PHOTO);}catch(android.content.ActivityNotFoundException e){Toast.makeText(this,"系统相册不可用，请使用已导入照片",Toast.LENGTH_LONG).show();}}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request!=PICK_PHOTO||result!=RESULT_OK||data==null||data.getData()==null)return;
         final Uri uri=data.getData();final int style=pendingStyle;
         boolean retained=false;
         try{
-            if((data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION)!=0){
-                getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);retained=true;
-            }
+            getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);retained=true;
         }catch(SecurityException ignored){android.util.Log.i("frame-home","Provider granted temporary photo access");}
         final boolean persist=retained;
-        worker.execute(()->{
+        imports.execute(()->{
             String name="照片.jpg";long size=0;
             try(android.database.Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE},null,null,null)){
                 if(cursor!=null&&cursor.moveToFirst()){
@@ -109,20 +102,20 @@ public final class FrameHome extends AppCompatActivity {
             runOnUiThread(()->{if(!closed){PhotoStudio.open(this,uri,title,style);loadRecent();}});
         });
     }
-    private void loadSamples(){worker.execute(()->{
-        List<Bitmap> photos=new ArrayList<>(), rendered=new ArrayList<>();
-        String[] assets={"studio/forest.png","studio/coast.png","pexels-thevibrantmachine-3066867.jpg"};
-        try{
-            for(String asset:assets)try(InputStream in=getAssets().open(asset)){BitmapFactory.Options decode=new BitmapFactory.Options();decode.inSampleSize=4;Bitmap photo=BitmapFactory.decodeStream(in,null,decode);if(photo!=null)photos.add(photo);}
-            if(photos.isEmpty())return;
-            PhotoDetails details=new PhotoDetails();
-            for(int i=0;i<sampleStyles.size();i++){PhotoFrame.Options options=new PhotoFrame.Options();options.style=sampleStyles.get(i);options.parameters=false;options.title="Photography";options.paper=PhotoFrame.defaultPaper(options.style);List<Bitmap> exampleExtras=new ArrayList<>();for(int j=1;j<6;j++)exampleExtras.add(photos.get((i+j)%photos.size()));rendered.add(PhotoFrame.render(photos.get(i%photos.size()),details,options,exampleExtras));}
-        }catch(Exception|OutOfMemoryError e){android.util.Log.w("frame-home","Template samples unavailable",e);}
-        runOnUiThread(()->{if(closed){for(Bitmap bitmap:photos)bitmap.recycle();for(Bitmap bitmap:rendered)bitmap.recycle();return;}samples.addAll(photos);samples.addAll(rendered);if(photos.size()>1)banner.setImageBitmap(photos.get(1));for(int i=0;i<rendered.size()&&i<sampleViews.size();i++)sampleViews.get(i).setImageBitmap(rendered.get(i));});
-    });}
+    private final class FrameSamples extends androidx.recyclerview.widget.RecyclerView.Adapter<SampleCell>{
+        private final int[] styles;
+        FrameSamples(int[] styles){this.styles=styles;setHasStableIds(true);}
+        @Override public long getItemId(int position){return styles[position];}
+        @Override public int getItemCount(){return styles.length;}
+        @Override public SampleCell onCreateViewHolder(android.view.ViewGroup parent,int type){LinearLayout card=column();ImageView image=new ImageView(FrameHome.this);image.setScaleType(ImageView.ScaleType.FIT_CENTER);card.addView(image,new LinearLayout.LayoutParams(-1,dp(138)));TextView caption=text("",14,0xffe0e1e2);card.addView(caption,spacing(-1,-2,9));androidx.recyclerview.widget.RecyclerView.LayoutParams lp=new androidx.recyclerview.widget.RecyclerView.LayoutParams(dp(164),-1);lp.setMarginEnd(dp(14));card.setLayoutParams(lp);card.setFocusable(true);return new SampleCell(card,image,caption);}
+        @Override public void onBindViewHolder(SampleCell holder,int position){int style=styles[position];holder.caption.setText(PhotoFrame.NAMES[style]);holder.itemView.setContentDescription(PhotoFrame.NAMES[style]+"，选择照片制作");holder.itemView.setOnClickListener(v->{pendingStyle=style;pickPhoto();});holder.itemView.setOnLongClickListener(v->{chooseSource(style);return true;});SampleFrameThumbnails.bind(FrameHome.this,holder.image,style);}
+        @Override public void onViewRecycled(SampleCell holder){holder.image.setTag(null);holder.image.setImageDrawable(null);}
+    }
+    private static final class SampleCell extends androidx.recyclerview.widget.RecyclerView.ViewHolder{final ImageView image;final TextView caption;SampleCell(View card,ImageView image,TextView caption){super(card);this.image=image;this.caption=caption;}}
+    private void loadSamples(){worker.execute(()->{Bitmap image=null;try(InputStream in=getAssets().open("studio/coast.png")){BitmapFactory.Options decode=new BitmapFactory.Options();decode.inSampleSize=2;image=BitmapFactory.decodeStream(in,null,decode);if(image!=null)image.prepareToDraw();}catch(Exception|OutOfMemoryError error){android.util.Log.w("frame-home","Banner unavailable",error);}final Bitmap result=image;runOnUiThread(()->{if(closed){if(result!=null)result.recycle();return;}if(result!=null){samples.add(result);banner.setImageBitmap(result);}});});}
     @Override protected void onResume(){super.onResume();loadRecent();}
     private void loadRecent(){final int request=++generation;worker.execute(()->{List<SavedLibrary.Photo> photos=new ArrayList<>();List<Bitmap> images=new ArrayList<>();try{SavedLibrary library=SavedLibrary.get(this);library.importPrevious();java.util.Set<String> seen=new java.util.HashSet<>();for(SavedLibrary.Photo photo:library.list()){if(closed)break;if(photo.kind()==1&&seen.add(SavedLibrary.sourceKey(photo.uri()))&&library.exists(photo)){photos.add(photo);images.add(LocalMedia.thumbnail(this,photo));if(photos.size()==3)break;}}}catch(Exception e){android.util.Log.w("frame-home","Recent photos unavailable",e);}runOnUiThread(()->{if(closed||request!=generation){for(Bitmap bitmap:images)if(bitmap!=null)bitmap.recycle();return;}recent.removeAllViews();for(Bitmap bitmap:recentBitmaps)bitmap.recycle();recentBitmaps.clear();recentNote.setText(photos.isEmpty()?"还没有导入照片，可以直接从手机相册开始。":"点选照片，直接进入边框创作");for(int i=0;i<photos.size();i++){SavedLibrary.Photo photo=photos.get(i);Bitmap bitmap=images.get(i);LinearLayout tile=column();ImageView view=new ImageView(this);view.setScaleType(ImageView.ScaleType.CENTER_CROP);view.setImageResource(R.drawable.baseline_landscape_24);if(bitmap!=null){view.setImageBitmap(bitmap);recentBitmaps.add(bitmap);}tile.addView(view,new LinearLayout.LayoutParams(-1,dp(84)));TextView name=text(photo.name.startsWith("Fuji-frame-")?"边框作品":photo.name,10,0xffadbdb3);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(name,spacing(-1,-2,8));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMarginEnd(dp(8));recent.addView(tile,lp);tile.setContentDescription(photo.name.startsWith("Fuji-frame-")?"查看边框作品":"用 "+photo.name+" 制作边框");tile.setOnClickListener(v->{if(photo.name.startsWith("Fuji-frame-"))startActivity(new Intent(this,LocalViewer.class).putExtra("target",photo.target).putExtra("name",photo.name));else PhotoStudio.open(this,photo.uri(),photo.name);});}});});}
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("pending_style",pendingStyle);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){moveTaskToBack(true);}
-    @Override protected void onDestroy(){closed=true;worker.shutdownNow();for(ImageView image:sampleViews)image.setImageDrawable(null);banner.setImageDrawable(null);recent.removeAllViews();for(Bitmap bitmap:samples)bitmap.recycle();for(Bitmap bitmap:recentBitmaps)bitmap.recycle();super.onDestroy();}
+    @Override protected void onDestroy(){closed=true;worker.shutdownNow();imports.shutdownNow();banner.setImageDrawable(null);recent.removeAllViews();for(Bitmap bitmap:samples)bitmap.recycle();for(Bitmap bitmap:recentBitmaps)bitmap.recycle();super.onDestroy();}
 }

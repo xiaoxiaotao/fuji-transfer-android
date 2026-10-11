@@ -15,8 +15,8 @@ android {
         applicationId "dev.danielc.fujiapp"
         minSdk 23
         targetSdk 35
-        versionCode 70
-        versionName "0.2.3-zh.58-frame-library"
+        versionCode 71
+        versionName "0.2.3-zh.59-smooth-picker"
     }
 
     buildTypes {
