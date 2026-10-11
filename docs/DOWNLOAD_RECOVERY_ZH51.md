@@ -1,6 +1,6 @@
 # zh.51：断线状态与未完成下载恢复
 
-开发分支：`codex/connection-download-recovery`。真机验证通过后合并 main。
+开发分支：`codex/connection-download-recovery`。2026-10-11 本地构建、Lint 和 84 项 Android 测试通过，用户确认真机功能正常，批准合并 main。
 
 - 跟踪实际用于相机的 Android Network，网络丢失时统一显示 Wi-Fi 断开、停止下载并保留记录；其他网络变化不触发相机断线。主动断开先清除监听身份。
 - 下载前保存整批照片的相机身份和照片指纹；任务数据库从 v1 无损升级至 v2。

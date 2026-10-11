@@ -1,6 +1,6 @@
 # Fuji图库 · Fuji Transfer Android
 
-**Fuji图库**是面向富士相机的 Android 连接、图库和图像传输应用，基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前开发分支版本：`0.2.3-zh.51-download-recovery`；公开测试 APK 为 zh.50。
+**Fuji图库**是面向富士相机的 Android 连接、图库和图像传输应用，基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前代码版本：`0.2.3-zh.51-download-recovery`；公开测试 APK 为 zh.50。
 
 ## 下载 APK
 
@@ -32,7 +32,7 @@ APK SHA-256：
 
 zh.43–zh.50 完善蓝牙识别、手动断开与重连、PTP 初始化恢复、连接状态提示及下载进度显示。zh.50 已在小米 10 Pro 覆盖安装，用户确认保存进度显示正常；zh.49 实机完成连接并读取 234 个文件的图库索引。其他相机、长时间后台传输和更广泛的系统兼容性仍需验证。
 
-详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 为 zh.50；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)在分支验证中，尚未合并 main。
+详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 为 zh.50；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)已通过本地构建、Lint、84 项 Android 测试及用户真机功能验证，合并至 main。
 
 ## 构建
 
