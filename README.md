@@ -2,6 +2,12 @@
 
 面向富士相机的 Android 连接、图库和图像传输应用，基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前版本：`0.2.3-zh.42-transfer`。
 
+## 下载 APK
+
+[直接下载 zh.42 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/releases/download/v0.2.3-zh.42-transfer/fudge-0.2.3-zh.42-transfer-arm64.apk) · [版本说明与校验值](https://github.com/xiaoxiaotao/fuji-transfer-android/releases/tag/v0.2.3-zh.42-transfer)
+
+适用于 Android 6.0 及以上的 arm64 设备。此安装包已在小米 10 Pro（Android 13）安装并启动，当前仍为测试版。请下载 `.apk` 附件，源码压缩包不能直接安装。
+
 ## 当前功能
 
 - 中文界面，蓝牙启动相机 Wi-Fi、手动连接相机热点、USB 传图。
