@@ -18,7 +18,7 @@ import Photos
     private var ledger: TransferLedger?
     private var camera: String?
     private var session = UUID()
-    private var stopRequested = false, disconnectAfter = false
+    private var stopRequested = false, disconnectAfter = false, closing = false
     private var monitor: Task<Void, Never>?
     private var hotspot: String?
     private var loadingThumbs = Set<UInt32>()
@@ -39,8 +39,9 @@ import Photos
                 guard !stopRequested else { throw CancellationError() }
                 title = "蓝牙连接成功 · 正在连接 Wi-Fi"; detail = "请允许 iPhone 加入相机热点"
                 try await join(config)
+                hotspot = config.ssid
                 guard !stopRequested else { throw CancellationError() }
-                hotspot = config.ssid; camera = config.camera
+                camera = config.camera
                 title = "Wi-Fi 已连接 · 正在建立相机会话"
                 try await open(ip: ip, mode: 2)
             } catch { await fail(error) }
@@ -87,12 +88,16 @@ import Photos
         }
     }
     private func fail(_ error: Error) async {
+        guard !closing else { return }
+        closing = true; let ownedBusy = busy; busy = true
+        defer { closing = false; busy = ownedBusy }
         title = error is CancellationError ? "连接已取消" : "连接错误"
         detail = error is CancellationError ? "需要连接时请重新选择相机" : error.localizedDescription + "；未完成下载记录已保留"
         connected = false; monitor?.cancel(); bluetooth.disconnect(); RunLog.shared.write(detail); await backend.disconnect()
         if let hotspot { NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: hotspot); self.hotspot = nil }
     }
     func disconnect() {
+        guard !closing else { return }
         stopRequested = true; disconnectAfter = true; monitor?.cancel(); title = busy ? "正在结束任务并断开" : "正在断开连接"
         if busy { if !connected { bluetooth.disconnect() }; detail = "当前文件处理结束后断开，剩余下载保留"; return }
         Task { await close() }
