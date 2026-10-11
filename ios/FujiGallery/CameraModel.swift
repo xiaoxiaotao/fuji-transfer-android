@@ -83,13 +83,14 @@ import Photos
             while !Task.isCancelled && connected && session == token {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 guard !Task.isCancelled && connected && session == token else { return }
-                if !busy { do { try await backend.ping() } catch { guard session == token else { return }; await fail(error); return } }
+                if !busy { do { try await backend.ping() } catch { guard !Task.isCancelled && connected && session == token else { return }; await fail(error); return } }
             }
         }
     }
     private func fail(_ error: Error) async {
         guard !closing else { return }
         closing = true; let ownedBusy = busy; busy = true
+        if connected { stopRequested = true }
         defer { closing = false; busy = ownedBusy }
         title = error is CancellationError ? "连接已取消" : "连接错误"
         detail = error is CancellationError ? "需要连接时请重新选择相机" : error.localizedDescription + "；未完成下载记录已保留"
