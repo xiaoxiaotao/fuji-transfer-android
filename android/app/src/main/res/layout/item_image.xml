@@ -1,26 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/imageView"
-    android:layout_width="100dp"
-    android:layout_height="100dp" >
-
-    <ImageView
-        android:id="@+id/frame_image"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop" />
-
-    <ImageView
-        android:id="@+id/frame_icon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|right" />
-
-    <TextView
-        android:id="@+id/frame_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="10sp" />
-
-</FrameLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="3dp" android:orientation="vertical">
+ <FrameLayout android:id="@+id/imageView" android:layout_width="match_parent" android:layout_height="120dp" android:background="@drawable/ui_tile" android:clipToOutline="true">
+ <ImageView android:id="@+id/frame_image" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:contentDescription="照片缩略图"/>
+ <ImageView android:id="@+id/frame_icon" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="bottom|end" android:visibility="gone" android:contentDescription="文件类型"/>
+ <View android:id="@+id/selection_border" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/ui_selection_border" android:visibility="gone" android:importantForAccessibility="no"/>
+ <TextView android:id="@+id/selection_check" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="top|end" android:layout_margin="6dp" android:gravity="center" android:text="✓" android:textColor="@color/ui_on_accent" android:background="@drawable/ui_check_selected" android:visibility="gone" android:importantForAccessibility="no"/>
+ <TextView android:id="@+id/download_badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="top|start" android:layout_margin="6dp" android:padding="4dp" android:text="✓" android:textSize="12sp" android:textColor="@color/ui_accent" android:background="@drawable/ui_download_badge" android:visibility="gone" android:contentDescription="已保存到手机"/>
+ </FrameLayout>
+ <TextView android:id="@+id/frame_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" android:textSize="10sp" android:textColor="@color/ui_text" android:maxLines="3" android:ellipsize="end" android:minHeight="40dp"/>
+</LinearLayout>

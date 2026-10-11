@@ -17,3 +17,16 @@ local.properties
 *.d
 compile_commands.json
 desktop/build
+
+# Local builds, device diagnostics and signing material
+**/build/
+**/.gradle/
+**/.cxx/
+*.apk
+*.log
+*.jks
+*.keystore
+.env
+.env.*
+!*.example
+*.hprof

@@ -94,15 +94,17 @@ int fujiusb_try_connect(struct PtpRuntime *r, int num) {
 
 int fujiusb_setup(struct PtpRuntime *r) {
 	int rc = ptp_open_session(r);
-	if (rc == PTP_CHECK_CODE) {
-		// PTP_RC_SessionAlreadyOpened, don't care
+	app_print("USB 打开会话：rc=%d，响应=0x%x",rc,ptp_get_return_code(r));
+	if (rc == PTP_CHECK_CODE && ptp_get_return_code(r) == PTP_RC_SessionAlreadyOpened) {
+		// Only accept the actual already-open response.
 	} else if (rc) {
-		app_print("Failed to open session.");
+		app_print("无法建立相机会话。");
 		return rc;
 	}
 
 	struct PtpDeviceInfo di;
 	rc = ptp_get_device_info(r, &di);
+	app_print("USB 读取相机信息：rc=%d，响应=0x%x",rc,ptp_get_return_code(r));
 	if (rc) return rc;
 
 	if (strlen(di.manufacturer) > sizeof("FUJIFILM")) {
@@ -111,12 +113,21 @@ int fujiusb_setup(struct PtpRuntime *r) {
 		}
 	}
 
+	struct FujiDeviceKnowledge *info = fuji_get(r);
+    snprintf(info->info_model, sizeof(info->info_model), "%.*s", (int)sizeof(di.model), di.model);
+    snprintf(info->info_name, sizeof(info->info_name), "%.*s", (int)sizeof(di.model), di.model);
+    snprintf(info->info_manufacturer, sizeof(info->info_manufacturer), "%.*s", (int)sizeof(di.manufacturer), di.manufacturer);
+    snprintf(info->info_version, sizeof(info->info_version), "%.*s", (int)sizeof(di.device_version), di.device_version);
+    snprintf(info->info_serial, sizeof(info->info_serial), "%.*s", (int)sizeof(di.serial_number), di.serial_number);
 	app_send_cam_name(di.model);
 
 	rc = ptp_get_prop_value(r, PTP_DPC_FUJI_USBMode);
-	if (rc == PTP_CHECK_CODE) {
+	app_print("USB 模式读取：rc=%d，响应=0x%x",rc,ptp_get_return_code(r));
+	if (rc == PTP_CHECK_CODE && ptp_get_return_code(r) == PTP_RC_DevicePropNotSupported) {
 		// This could also be FUJI_FEATURE_MOVIE_SHOOT
 		fuji_get(r)->transport = FUJI_FEATURE_USB_CARD_READER;
+		rc = 0;
+		app_print("相机使用标准 USB 读卡器协议");
 	} else if (rc) {
 		return rc;
 	} else {
@@ -137,8 +148,8 @@ int fujiusb_setup(struct PtpRuntime *r) {
 }
 
 int fujitether_setup(struct PtpRuntime *r) {
-	app_print("Waiting on the camera...");
-	app_print("Make sure you pressed OK.");
+	if(r->connection_type == PTP_USB) { app_print("正在初始化 USB 相机会话，请保持数据线连接"); }
+	else { app_print("正在等待相机…"); app_print("请在相机上按 OK 确认。"); }
 
 	if (r->connection_type == PTP_IP_USB) {
 		struct PtpFujiInitResp resp;
@@ -153,15 +164,15 @@ int fujitether_setup(struct PtpRuntime *r) {
 			rc = ptpip_fuji_init_req(r, DEVICE_NAME, &resp);
 		}
 		if (rc) {
-			app_print("Failed to initialize connection");
+			app_print("连接初始化失败");
 			return rc;
 		}
-		app_print("Initialized connection.");
+		app_print("连接已初始化。");
 
 		app_send_cam_name(resp.cam_name);
 
 		// Fuji cameras require delay after init
-		app_print("The camera is thinking...");
+		app_print("相机正在处理…");
 		usleep(50000);
 	}
 

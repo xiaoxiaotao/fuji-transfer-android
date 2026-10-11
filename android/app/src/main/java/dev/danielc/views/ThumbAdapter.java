@@ -25,9 +25,15 @@ public abstract class ThumbAdapter extends RecyclerView.Adapter<ThumbAdapter.Ima
         this.context = ctx;
     }
 
+    private final android.util.LruCache<Integer, Bitmap> thumbnails = new android.util.LruCache<Integer, Bitmap>(12 * 1024 * 1024) {
+        @Override protected int sizeOf(Integer key, Bitmap bitmap) { return bitmap.getByteCount(); }
+    };
+    public Bitmap cachedThumbnail(int handle) { return thumbnails.get(handle); }
+    public void displayCached(ImageViewHolder holder, Bitmap bitmap) { holder.image.setScaleType(ImageView.ScaleType.CENTER_CROP);holder.image.setImageBitmap(bitmap); holder.isLoaded=true; }
     public ArrayList<ImageViewHolder> holders = new ArrayList<>();
 
     public abstract void imageClickHandler(ImageViewHolder holder);
+    public boolean imageLongClickHandler(ImageViewHolder holder) { return false; }
     public abstract void queueImage(ImageViewHolder holder, int position);
     public abstract void cancelRequest(ImageViewHolder holder);
 
@@ -41,23 +47,28 @@ public abstract class ThumbAdapter extends RecyclerView.Adapter<ThumbAdapter.Ima
                 imageClickHandler(holder);
             }
         });
+        holder.itemView.setOnLongClickListener(v -> imageLongClickHandler(holder));
         return holder;
     }
 
     public void invalidThumb(Context ctx, ImageViewHolder holder) {
+        final int expectedHandle=holder.handle;
         holder.isLoaded = false;
         holder.itemView.post(new Runnable() {
             @SuppressLint("UseCompatLoadingForDrawables")
             @Override
             public void run() {
                 // TODO: Open a popup with some file information
-                holder.itemView.setOnClickListener(null);
-                holder.image.setBackground(ctx.getDrawable(R.drawable.baseline_question_mark_24));
+                if (holder.handle != expectedHandle) return;
+                holder.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+                holder.image.setImageResource(R.drawable.baseline_landscape_24);
+                holder.label.setText("此文件未提供预览");
             }
         });
     }
 
-    public void loadThumb(ImageViewHolder holder, byte[] data) {
+    public void loadThumb(ImageViewHolder holder, byte[] data) { loadThumb(holder, data, holder.handle); }
+    public void loadThumb(ImageViewHolder holder, byte[] data, int expectedHandle) {
         try {
             BitmapFactory.Options opt = new BitmapFactory.Options();
             opt.inScaled = true;
@@ -69,10 +80,13 @@ public abstract class ThumbAdapter extends RecyclerView.Adapter<ThumbAdapter.Ima
                 invalidThumb(holder.image.getContext(), holder);
                 return;
             }
+            thumbnails.put(expectedHandle, bitmap);
             holder.itemView.post(new Runnable() {
                 @SuppressLint("UseCompatLoadingForDrawables")
                 @Override
                 public void run() {
+                    if (holder.handle != expectedHandle) return;
+                    holder.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
                     holder.image.setImageBitmap(bitmap);
                     holder.isLoaded = true;
                 }
@@ -88,15 +102,22 @@ public abstract class ThumbAdapter extends RecyclerView.Adapter<ThumbAdapter.Ima
         cancelRequest(holder); // Cancel any queued requests on this holder
         holder.image.setForeground(context.getDrawable(R.drawable.ripple));
         holder.image.setBackground(context.getDrawable(R.drawable.light_button));
-        holder.image.setImageBitmap(null);
+        holder.image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        holder.image.setImageResource(R.drawable.baseline_landscape_24);
         holder.icon.setImageBitmap(null);
-        position = holder.getAdapterPosition();
-        holders.add(holder);
+        holder.isLoaded=false;
+        holder.label.setText("");
+        holder.itemView.setOnClickListener(v -> imageClickHandler(holder));
+        if (!holders.contains(holder)) holders.add(holder);
         queueImage(holder, position);
     }
 
     @Override
     public void onViewRecycled(ImageViewHolder holder) {
+        cancelRequest(holder);
+        holder.handle=-1;
+        holder.isLoaded=false;
+        holder.image.setImageBitmap(null);
         holders.remove(holder);
     }
 
@@ -104,23 +125,29 @@ public abstract class ThumbAdapter extends RecyclerView.Adapter<ThumbAdapter.Ima
         public ImageView image;
         public ImageView icon;
         public FrameLayout frame;
-        public int handle;
+        public volatile int handle;
         public String filename;
         public boolean isLoaded;
         public TextView label;
 
-        public ImageViewHolder(FrameLayout frame) {
+        public ImageViewHolder(View frame) {
             super(frame);
             this.handle = -1;
             this.isLoaded = false;
         }
 
         public static ImageViewHolder create(ViewGroup parent) {
-            FrameLayout frame = (FrameLayout)LayoutInflater.from(parent.getContext()).inflate(R.layout.item_image, parent, false);
-            ImageViewHolder h = new ImageViewHolder(frame);
-            h.label = frame.findViewById(R.id.frame_label);
-            h.image = frame.findViewById(R.id.frame_image);
-            h.icon = frame.findViewById(R.id.frame_icon);
+            View root=LayoutInflater.from(parent.getContext()).inflate(R.layout.item_image,parent,false);
+            FrameLayout frame=root.findViewById(R.id.imageView);
+            int columns=3;
+            if(parent instanceof RecyclerView){RecyclerView.LayoutManager layout=((RecyclerView)parent).getLayoutManager();if(layout instanceof androidx.recyclerview.widget.GridLayoutManager)columns=((androidx.recyclerview.widget.GridLayoutManager)layout).getSpanCount();}
+            int width=parent.getWidth()>0?parent.getWidth()-parent.getPaddingLeft()-parent.getPaddingRight():parent.getResources().getDisplayMetrics().widthPixels;
+            int gap=Math.round(6*parent.getResources().getDisplayMetrics().density);
+            frame.getLayoutParams().height=Math.max(1,width/columns-gap);
+            ImageViewHolder h=new ImageViewHolder(root);h.frame=frame;
+            h.label=root.findViewById(R.id.frame_label);
+            h.image=root.findViewById(R.id.frame_image);
+            h.icon=root.findViewById(R.id.frame_icon);
             return h;
         }
     }

@@ -1,5 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.FujiWifiApp" parent="Theme.AppCompat">
-
-    </style>
+<resources>
+ <style name="Theme.FujiWifiApp" parent="Theme.AppCompat"><item name="colorPrimary">@color/ui_background</item><item name="colorPrimaryDark">@color/ui_background</item><item name="colorAccent">@color/ui_accent</item><item name="android:windowBackground">@color/ui_background</item><item name="android:colorBackground">@color/ui_background</item><item name="android:textColorPrimary">@color/ui_text</item><item name="android:textColorSecondary">@color/ui_muted</item><item name="android:fontFamily">sans-serif</item><item name="android:statusBarColor">@color/ui_background</item><item name="android:navigationBarColor">@color/ui_background</item><item name="android:windowLightStatusBar">false</item><item name="android:windowActionModeOverlay">true</item></style>
+ <style name="Theme.FujiWifiApp.NoActionBar" parent="Theme.FujiWifiApp"><item name="windowActionBar">false</item><item name="windowNoTitle">true</item></style>
 </resources>

@@ -9,8 +9,10 @@
 #include "app.h"
 #include "backend.h"
 #include "fuji.h"
+#include "thumbnail_result.h"
 #include "fujiptp.h"
 #include "object.h"
+#include "usb_download.h"
 
 static struct DiscoverInfo fuji_discover_struct;
 
@@ -103,28 +105,37 @@ JNI_FUNC(jint, cPtpFujiPing)(JNIEnv *env, jobject thiz) {
 	return fuji_get_events(r);
 }
 
+static int file_chunk_add(void *arg, void *data, int size, int read) {
+    (void)read;
+    return fwrite(data, 1, (size_t)size, (FILE *)arg) == (size_t)size ? 0 : -1;
+}
 JNI_FUNC(jint, cFujiDownloadFile)(JNIEnv *env, jobject thiz, jint handle, jstring path) {
-	set_jni_env(env);
-
-	const char *c_path = (*env)->GetStringUTFChars(env, path, 0);
-
-	plat_dbg("Downloading to %s", c_path);
-	FILE *f = fopen(c_path, "wb");
-	if (f == NULL) return PTP_RUNTIME_ERR;
-
-	app_set_progress_bar(1, 1000000);
-	int rc = ptp_download_object(&backend.r, handle, f, FUJI_MAX_PARTIAL_OBJECT);
-	app_set_progress_bar(0, 0);
-	fclose(f);
-	if (rc) {
-		app_print("Failed to save %s: %s", c_path, ptp_perror(rc));
-		return rc;
-	}
-
-	(*env)->ReleaseStringUTFChars(env, path, c_path);
-	(*env)->DeleteLocalRef(env, path);
-
-	return 0;
+    set_jni_env(env);
+    const char *c_path = (*env)->GetStringUTFChars(env, path, 0);
+    if (!c_path) return PTP_RUNTIME_ERR;
+    struct PtpRuntime *r = ptp_get();
+    FILE *f = fopen(c_path, "wb");
+    int rc = PTP_RUNTIME_ERR;
+    if (f) {
+        ptp_mutex_lock(r);
+        struct PtpObjectInfo oi;
+        rc = fuji_begin_download_get_object_info(r, handle, &oi);
+        if (!rc && (oi.compressed_size == 0 || oi.compressed_size > 2147483647u)) rc = PTP_RUNTIME_ERR;
+        if (!rc) {
+            app_set_progress_bar(1, oi.compressed_size);
+            rc = r->connection_type == PTP_USB ? fuji_usb_download_checked(r, handle, f, oi.compressed_size, FUJI_MAX_PARTIAL_OBJECT) : fuji_download_file(r, handle, oi.compressed_size, file_chunk_add, f);
+            if (!rc && (ferror(f) || ftell(f) != (long)oi.compressed_size)) {
+                app_print("文件长度校验失败：预期=%u，实际=%ld",oi.compressed_size,ftell(f));
+                rc = PTP_RUNTIME_ERR;
+            }
+            app_set_progress_bar(0, 0);
+        }
+        ptp_mutex_unlock(r);
+        if (fclose(f) && !rc) rc = PTP_RUNTIME_ERR;
+        if (rc) remove(c_path);
+    }
+    (*env)->ReleaseStringUTFChars(env, path, c_path);
+    return rc;
 }
 
 static int jbytearray_add(void *arg, void *data, int size, int read) {
@@ -181,6 +192,9 @@ JNI_FUNC(jbyteArray, cFujiGetThumb)(JNIEnv *env, jobject thiz, jint handle) {
 	ptp_mutex_lock(r);
 
 	int rc = fuji_get_thumb(r, handle, &offset, &length);
+    if(thumbnail_unavailable(rc,rc==PTP_CHECK_CODE?ptp_get_return_code(r):0)){
+        app_print("照片 #%d 未提供可用缩略图，保留相机连接",handle);ptp_mutex_unlock(r);return (*env)->NewByteArray(env,0);
+    }
 	if (rc) {
 		ptp_mutex_unlock(r);
 		return NULL;
@@ -267,27 +281,76 @@ JNI_FUNC(jint, cGetTransport)(JNIEnv *env, jobject thiz) {
 	return fuji_get(ptp_get())->transport;
 }
 
-JNI_FUNC(jint, cTryConnectWiFi)(JNIEnv *env, jobject thiz, jint extra_tmout) {
-	set_jni_env(env);
-	struct PtpRuntime *r = ptp_get();
-	char *c_ip = app_get_camera_ip();
-	fuji_reset_ptp(r);
-	strcpy(fuji_get(r)->ip_address, c_ip);
-	fuji_get(r)->transport = FUJI_FEATURE_WIRELESS_COMM;
-	if (app_get_wifi_network_handle(&fuji_get(r)->net)) {
-		free(c_ip);
-		return -1;
-	}
-	int rc = ptpip_connect(&backend.r, c_ip, FUJI_CMD_IP_PORT, (int)extra_tmout);
-	free(c_ip);
+// Returns only previously received metadata. Never sends a PTP command.
+JNI_FUNC(jobjectArray, cGetCachedCameraInfo)(JNIEnv *env, jobject thiz) {
+    set_jni_env(env);
+    struct PtpRuntime *r = ptp_get();
+    char values[6][128] = {{0}};
+    ptp_mutex_lock(r);
+    struct FujiDeviceKnowledge *info = fuji_get(r);
+    if (info) {
+        snprintf(values[0],128,"%.127s",info->info_name);
+        snprintf(values[1],128,"%.127s",info->info_model);
+        snprintf(values[2],128,"%.127s",info->info_manufacturer);
+        snprintf(values[3],128,"%.63s",info->info_version);
+        snprintf(values[4],128,"%.127s",info->info_serial);
+        snprintf(values[5],128,"%.63s",info->ip_address);
+    }
+    ptp_mutex_unlock(r);
+    jclass string_class = (*env)->FindClass(env,"java/lang/String");
+    if (!string_class) return NULL;
+    jobjectArray result = (*env)->NewObjectArray(env,6,string_class,NULL);
+    (*env)->DeleteLocalRef(env,string_class);
+    if (!result) return NULL;
+    for (int i=0;i<6;i++) {
+        jstring value=(*env)->NewStringUTF(env,values[i]);
+        if (!value) return NULL;
+        (*env)->SetObjectArrayElement(env,result,i,value);
+        (*env)->DeleteLocalRef(env,value);
+        if ((*env)->ExceptionCheck(env)) return NULL;
+    }
+    return result;
+}
 
-	return rc;
+static int xapp_handoff = 0;
+static int auto_wifi_protocol = 0;
+JNI_FUNC(void, cSetWiFiProtocol)(JNIEnv *env, jobject thiz, jint mode) {
+    auto_wifi_protocol = mode == 0;
+    xapp_handoff = mode == 2;
+}
+JNI_FUNC(void, cSetXAppHandoff)(JNIEnv *env, jobject thiz, jboolean enabled) {
+    xapp_handoff = enabled ? 1 : 0;
+    auto_wifi_protocol = 0;
+}
+
+JNI_FUNC(jint, cTryConnectWiFi)(JNIEnv *env, jobject thiz, jint extra_tmout) {
+ set_jni_env(env);struct PtpRuntime *r=ptp_get();ptp_mutex_lock(r);
+ if(!r->io_kill_switch){ptp_mutex_unlock(r);return PTP_RUNTIME_ERR;}
+ struct NetworkHandle net={0};
+ if(app_get_wifi_network_handle(&net)){app_print("相机 Wi-Fi 网络不可用，未启动 TCP 重试");ptp_mutex_unlock(r);return PTP_NO_DEVICE;}
+ char *c_ip=app_get_camera_ip();if(!c_ip){ptp_mutex_unlock(r);return PTP_RUNTIME_ERR;}
+ /* Drop closed transport resources before reset changes the backend type. */
+ if(r->comm_priv){if(r->connection_type==PTP_USB)ptp_device_close(r);else{ptpip_device_close(r);free(r->comm_priv);r->comm_priv=NULL;}}
+ fuji_reset_ptp(r);snprintf(fuji_get(r)->ip_address,sizeof(fuji_get(r)->ip_address),"%s",c_ip);fuji_get(r)->net=net;
+ fuji_get(r)->transport=xapp_handoff?FUJI_FEATURE_XAPP_WIRELESS_COMM:FUJI_FEATURE_WIRELESS_COMM;
+ fuji_get(r)->auto_protocol=auto_wifi_protocol;
+ int rc=ptpip_connect(r,c_ip,FUJI_CMD_IP_PORT,(int)extra_tmout);free(c_ip);
+ ptp_mutex_unlock(r);return rc;
 }
 
 JNI_FUNC(jint, cTryConnectUSB)(JNIEnv *env, jclass thiz, jobject ctx) {
 	set_jni_env_ctx(env, ctx);
 	struct PtpRuntime *r = ptp_get();
+	ptp_mutex_lock(r);
+	if (!r->io_kill_switch) { ptp_mutex_unlock(r); return PTP_RUNTIME_ERR; }
+	/* USB and TCP backends use different comm_priv layouts. Drop a closed TCP
+	 * backend before opening USB so it cannot be interpreted as JNI references. */
+	if (r->comm_priv) {
+		if (r->connection_type == PTP_USB) ptp_device_close(r);
+		else { ptpip_device_close(r); free(r->comm_priv); r->comm_priv=NULL; }
+	}
 	int rc = fujiusb_try_connect(r, 0);
+	ptp_mutex_unlock(r);
 	return rc;
 }
 
@@ -368,6 +431,8 @@ JNI_FUNC(jint, cStartDiscovery)(JNIEnv *env, jobject thiz, jobject ctx) {
 	struct DiscoverInfo *info = &fuji_discover_struct;
 
 	int rc = fuji_discover_thread(info, app_get_client_name(), NULL);
+	// A direct connection may take ownership while discovery is waiting in select.
+	if (app_check_thread_cancel()) rc = FUJI_D_CANCELED;
 	if (rc > 0) {
 		jstring model = (*env)->NewStringUTF(env, info->camera_model);
 		jstring name = (*env)->NewStringUTF(env, info->camera_name);

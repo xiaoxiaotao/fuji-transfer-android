@@ -1,15 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="GreyButton">
-        <item name="android:background">@drawable/light_button</item>
-        <item name="android:foreground">@drawable/ripple</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:clickable">true</item>
-    </style>
-    <style name="GoButton">
-        <item name="android:background">@drawable/go_button</item>
-        <item name="android:foreground">@drawable/ripple</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:clickable">true</item>
-    </style>
+ <style name="GreyButton"><item name="android:background">@drawable/light_button</item><item name="android:backgroundTint">@null</item><item name="android:foreground">@drawable/ripple</item><item name="android:textSize">14sp</item><item name="android:textColor">@color/ui_text</item><item name="android:textAllCaps">false</item><item name="android:minHeight">48dp</item><item name="android:minWidth">0dp</item><item name="android:paddingLeft">12dp</item><item name="android:paddingRight">12dp</item><item name="android:fontFamily">sans-serif-medium</item><item name="android:includeFontPadding">false</item></style>
+ <style name="GoButton" parent="GreyButton"><item name="android:textColor">@color/ui_on_accent</item><item name="android:background">@drawable/go_button</item><item name="android:textSize">15sp</item></style>
+ <style name="UiTextButton" parent="GreyButton"><item name="android:background">@drawable/ui_text_button</item><item name="android:textColor">@color/ui_accent</item></style>
+ <style name="UiTitle"><item name="android:textSize">22sp</item><item name="android:textColor">@color/ui_text</item><item name="android:fontFamily">sans-serif-medium</item><item name="android:includeFontPadding">false</item></style>
+ <style name="UiBody"><item name="android:textSize">13sp</item><item name="android:textColor">@color/ui_muted</item><item name="android:lineSpacingExtra">3dp</item><item name="android:includeFontPadding">false</item></style>
 </resources>

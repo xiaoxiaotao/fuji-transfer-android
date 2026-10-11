@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  linux-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup git
+      run: |
+        git config --global url."https://github.com/".insteadOf "git@github.com:"
+        git submodule update --init --recursive
+
+    - name: Install dependencies
+      run: sudo apt install libusb-1.0-0-dev libexif-dev cmake libpcap-dev liblua5.3-dev libquickjs
+
+    - name: Build everything
+      run: cmake -DPTP_INCLUDE_CLI=ON -DPTP_INCLUDE_EXAMPLES=ON -DPTP_INCLUDE_BIND=ON -B build -G Ninja && cmake --build build
+
+    - name: Compile and run regression test
+      run: |
+        cmake -G Ninja -B build_test -DPTP_INCLUDE_VCAM_TEST=ON -DPTP_INCLUDE_LIBUSB_LIBS=OFF
+        cmake --build build_test
+        build_test/test
+
+    - name: Install mingw dependencies
+      run: sudo apt install gcc-mingw-w64-base g++-mingw-w64-x86-64-win32
+
+    - name: Compile libpwd test
+      run: |
+        cmake -DCMAKE_TOOLCHAIN_FILE=.github/workflows/mingw.cmake -DPTP_INCLUDE_WINDOWS_TEST=ON -G Ninja -B build_win
+        cmake --build build_win
+
+  macOS-build:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: brew install cmake ninja libusb --force
+
+    - name: Build
+      run: cmake -B build -G Ninja && cmake --build build

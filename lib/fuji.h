@@ -56,6 +56,12 @@ struct DiscoverInfo {
 
 /// @brief Holds runtime info about the camera
 struct FujiDeviceKnowledge {
+    uint32_t console_events[8];
+    unsigned console_events_valid;
+    int console_remote_active;
+    // Passive connection metadata, cleared by fuji_reset_ptp. No extra camera operations.
+    char info_name[128], info_model[128], info_manufacturer[128];
+    char info_version[64], info_serial[128];
 	/// @note applied from struct DiscoverInfo
 	struct NetworkHandle net;
 	/// @note applied from struct DiscoverInfo
@@ -76,6 +82,8 @@ struct FujiDeviceKnowledge {
 	/// @brief Camera's initial value of PTP_DPC_FUJI_RemoteVersion
 	int remote_version;
 	int num_objects;
+    int *xapp_handles;
+    int auto_protocol;
 	int open_capture_trans_id;
 };
 struct FujiDeviceKnowledge *fuji_get(struct PtpRuntime *r);

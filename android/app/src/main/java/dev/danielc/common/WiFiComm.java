@@ -40,8 +40,25 @@ public class WiFiComm {
     public static final int NOT_CONNECTED = -102;
     public static final int UNSUPPORTED_SDK = -103;
 
-    static Network wifiDevice = null;
-    static Network foundWiFiDevice = null;
+    static volatile Network wifiDevice = null;
+    static volatile Network foundWiFiDevice = null;
+    private volatile boolean selecting;
+    private volatile boolean selectedAddressReady;
+    private ConnectivityManager.NetworkCallback networkListener;
+    public boolean selectedNetworkReady(){
+        return selectedAddressReady&&isNetworkValid(foundWiFiDevice);
+    }
+    public static boolean hasCameraAddress(LinkProperties links){
+        if(links==null)return false;
+        for(android.net.LinkAddress address:links.getLinkAddresses()){
+            java.net.InetAddress ip=address.getAddress();
+            if(ip instanceof java.net.Inet4Address&&!ip.isAnyLocalAddress()&&!ip.isLoopbackAddress()&&!ip.isLinkLocalAddress())return true;
+        }
+        return false;
+    }
+    public boolean isSelecting(){return selecting;}
+    public long selectedNetworkHandle(){Network selected=foundWiFiDevice;return selected==null?NOT_AVAILABLE:selected.getNetworkHandle();}
+    public Object selectionToken(){return lastCallback;}
 
     // Non-static event handlers since a frontend may need to spawn two listeners
     public Handler handler = null;
@@ -61,22 +78,35 @@ public class WiFiComm {
         }
     }
 
-    ConnectivityManager.NetworkCallback lastCallback = null;
+    volatile ConnectivityManager.NetworkCallback lastCallback = null;
 
     /** Opens an Android 10+ popup to prompt the user to select a WiFi network */
+    public int connectToCameraAccessPoint(Context ctx, String ssid, String password) {
+        return requestAccessPoint(ctx, password.isEmpty() ? null : password, null, ssid, true);
+    }
+
+    public int connectToVisibleCameraAccessPoint(Context ctx, String ssid, String password) {
+        return requestAccessPoint(ctx, password.isEmpty()?null:password, null, ssid, false);
+    }
+
     public int connectToAccessPoint(Context ctx, String password, PatternMatcher pattern) {
+        return requestAccessPoint(ctx, password, pattern, null, false);
+    }
+
+    private synchronized int requestAccessPoint(Context ctx, String password, PatternMatcher pattern, String ssid, boolean hidden) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             ConnectivityManager connectivityManager = (ConnectivityManager)ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (lastCallback != null) {
-                connectivityManager.unregisterNetworkCallback(lastCallback);
-            }
+            ConnectivityManager.NetworkCallback previous=lastCallback;
+            lastCallback=null;foundWiFiDevice=null;selectedAddressReady=false;selecting=false;
+            if(previous!=null){try{connectivityManager.unregisterNetworkCallback(previous);}catch(IllegalArgumentException ignored){}}
 
             WifiNetworkSpecifier.Builder builder = new WifiNetworkSpecifier.Builder();
-            builder.setSsidPattern(pattern);
+            if (ssid != null) { builder.setSsid(ssid); builder.setIsHiddenSsid(hidden); }
+            else builder.setSsidPattern(pattern);
 
             if (password != null) {
                 builder.setWpa2Passphrase(password);
-                Log.d(TAG, String.format("password: %s", password));
+
             }
             NetworkSpecifier specifier = builder.build();
 
@@ -89,50 +119,69 @@ public class WiFiComm {
             lastCallback = new ConnectivityManager.NetworkCallback() {
                 @Override
                 public void onAvailable(Network network) {
+                  synchronized(WiFiComm.this){
+                    if(lastCallback!=this)return;
+                    selecting=false;
+                    if(network.equals(foundWiFiDevice))return;
+                    selectedAddressReady=false;
                     Log.d(TAG, "Network selected by user: " + network);
                     foundWiFiDevice = network;
                     run(onWiFiSelectAvailable);
                     isHandlingConflictingConnections();
+                  }
                 }
                 @Override
                 public void onUnavailable() {
+                  synchronized(WiFiComm.this){
+                    if(lastCallback!=this)return;
+                    selecting=false;
                     Log.d(TAG, "Network unavailable, not selected by user");
-                    foundWiFiDevice = null;
+                    foundWiFiDevice = null;selectedAddressReady=false;
                     run(onWiFiSelectCancel);
+                  }
+                }
+                @Override
+                public void onLost(Network network) {
+                  synchronized(WiFiComm.this){
+                    if(lastCallback!=this||!network.equals(foundWiFiDevice))return;
+                    selecting=false;foundWiFiDevice = null;selectedAddressReady=false;
+                    run(onWiFiSelectCancel);
+                  }
+                }
+                @Override
+                public void onLinkPropertiesChanged(Network network, LinkProperties links) {
+                    synchronized(WiFiComm.this){if(lastCallback==this&&network.equals(foundWiFiDevice))selectedAddressReady=hasCameraAddress(links);}
                 }
                 @Override
                 public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
-                    Log.e(TAG, "capabilities changed");
+                    Log.d(TAG, "Selected Wi-Fi capabilities updated");
                 }
             };
-            connectivityManager.requestNetwork(request, lastCallback);
+            selecting=true;
+            try{connectivityManager.requestNetwork(request, lastCallback, 90000);}catch(RuntimeException e){selecting=false;lastCallback=null;throw e;}
             return 0;
         } else {
             return UNSUPPORTED_SDK;
         }
     }
 
-    public void startNetworkListeners(Context ctx) {
+    public synchronized void startNetworkListeners(Context ctx) {
+        if(networkListener!=null)return;
         ConnectivityManager m = (ConnectivityManager)ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkRequest.Builder requestBuilder = new NetworkRequest.Builder();
         requestBuilder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
 
         ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
-            Intent settings = null;
             @Override
             public void onAvailable(Network network) {
                 Log.d(TAG, "Wifi network is available: " + network.getNetworkHandle());
-                if (settings != null) {
-                    ((Activity)ctx).finish();
-                }
-
                 wifiDevice = network;
                 run(onAvailable);
             }
             @Override
             public void onLost(Network network) {
                 Log.e(TAG, "Lost network\n");
-                wifiDevice = null;
+                if(network.equals(wifiDevice))wifiDevice = null;
             }
             @Override
             public void onUnavailable() {
@@ -147,11 +196,10 @@ public class WiFiComm {
 
         // TODO: Gracefully handle this
         try {
-            m.requestNetwork(requestBuilder.build(), networkCallback);
+            m.registerNetworkCallback(requestBuilder.build(), networkCallback);
+            networkListener=networkCallback;
         } catch (Exception e) {
-            Intent goToSettings = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
-            goToSettings.setData(Uri.parse("package:" + ctx.getPackageName()));
-            ctx.startActivity(goToSettings);
+            Log.e(TAG, "Unable to observe Wi-Fi networks", e);
         }
     }
 
@@ -180,10 +228,9 @@ public class WiFiComm {
 
     public static boolean isNetworkValid(Network net) {
         if (cm == null) return false;
-        NetworkInfo wifiInfo = cm.getNetworkInfo(net);
         if (net == null) return false;
-        if (wifiInfo == null) return false;
-        return wifiInfo.isAvailable();
+        NetworkCapabilities capabilities = cm.getNetworkCapabilities(net);
+        return capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
     }
 
     // If we go through WifiNetworkSpecifier, then the device may be handling two concurrent connections.
@@ -220,15 +267,16 @@ public class WiFiComm {
             return UNSUPPORTED_SDK;
         }
 
+        Network selected=foundWiFiDevice,defaultWifi=wifiDevice;
         // Prefer user-selected network
-        if (isNetworkValid(foundWiFiDevice)) {
+        if (isNetworkValid(selected)) {
             Log.d(TAG, "Returning found wifi device");
-            return foundWiFiDevice.getNetworkHandle();
+            return selected.getNetworkHandle();
         }
 
-        if (isNetworkValid(wifiDevice)) {
+        if (isNetworkValid(defaultWifi)) {
             Log.d(TAG, "Returning default WiFi");
-            return wifiDevice.getNetworkHandle();
+            return defaultWifi.getNetworkHandle();
         }
 
         Log.d(TAG, "WiFi network not available");

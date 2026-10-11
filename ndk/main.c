@@ -1,3 +1,4 @@
+#include <limits.h>
 // Init routines
 // Copyright 2023 (c) Fudge
 #include <stdio.h>
@@ -309,9 +310,16 @@ int ptpip_set_extra_socket_settings(struct PtpRuntime *r, int sockfd) {
     return 0;
 }
 
+static int download_kib_per_second(long elapsed_ms, size_t bytes) {
+    if (elapsed_ms <= 0) return 0;
+    double rate = (double)bytes * 1000.0 / ((double)elapsed_ms * 1024.0);
+    return rate > INT_MAX ? INT_MAX : (int)rate;
+}
+
 void app_report_download_speed(long time, size_t size) {
 	plat_dbg("Downloaded %lu in %lums", size, time);
-	int mbps = (int)((size * 8) / (time));
+	if (time <= 0) return;
+	int mbps = download_kib_per_second(time, size); // JNI value is KiB/s
 	JNIEnv *env = get_jni_env();
 	(*env)->PushLocalFrame(env, 5);
 	jclass f = get_frontend_class(env);

@@ -238,7 +238,7 @@ int fuji_simulate_app(struct PtpRuntime *r) {
 				fuji_end_file_download(r);
 				continue;
 			} else if (rc) {
-				tester_fail("Failed to get object info");
+				tester_fail("无法获取照片信息");
 				return rc;
 			}
 

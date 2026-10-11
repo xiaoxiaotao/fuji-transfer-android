@@ -16,6 +16,8 @@ add_library(fudge SHARED
 	camlib.c
 	usb.c
 	liveview.c
+	remote.c
+	console.c
 	android.c
 )
 

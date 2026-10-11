@@ -5,6 +5,7 @@ plugins {
 android {
     namespace 'dev.danielc.fujiapp'
     compileSdk 35
+    ndkVersion "25.1.8937393"
 
     buildFeatures {
         buildConfig true
@@ -14,8 +15,8 @@ android {
         applicationId "dev.danielc.fujiapp"
         minSdk 23
         targetSdk 35
-        versionCode 12
-        versionName "0.2.3 (beta)"
+        versionCode 54
+        versionName "0.2.3-zh.42-transfer"
     }
 
     buildTypes {
@@ -24,6 +25,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
         }
+    }
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all { systemProperty "robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2"; jvmArgs "--add-opens=java.base/java.lang=ALL-UNNAMED", "--add-opens=java.base/java.util=ALL-UNNAMED", "--add-opens=java.base/java.io=ALL-UNNAMED" }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
@@ -37,6 +42,8 @@ android {
 }
 
 dependencies {
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.robolectric:robolectric:4.17"
     implementation 'com.jsibbold:zoomage:1.3.1'
     implementation 'androidx.appcompat:appcompat:1.4.1'
     implementation 'com.google.android.material:material:1.5.0'

@@ -66,7 +66,7 @@ public class Tester extends AppCompatActivity {
         log("(The tester is only designed for WiFi pairing. PC AutoSave or Wireless Tether Shoot is not working here yet.)");
 
         if (Backend.cRouteLogs() == 0) {
-            log("Routing logs to memory buffer.");
+            log("正在收集日志。");
         }
 
         findViewById(R.id.tester_select_wifi).setOnClickListener(new View.OnClickListener() {
@@ -75,7 +75,7 @@ public class Tester extends AppCompatActivity {
                 String password = MySettings.getWPA2Password();
                 if (password.length() == 0) password = null;
                 if (wifi.connectToAccessPoint(Tester.this, password, Backend.matchAp) != 0) {
-                    fail("Didn't select access point.");
+                    fail("未选择 Wi-Fi 网络。");
                 }
             }
         });
@@ -94,7 +94,7 @@ public class Tester extends AppCompatActivity {
                 log(getString(R.string.connecting));
                 int rc = Backend.cTryConnectWiFi(0);
                 if (rc != 0) {
-                    fail("Failed to connect to cmd: " + Frontend.parseErr(rc));
+                    fail("无法连接：" + Frontend.parseErr(rc));
 
                     rc = Backend.cTryConnectUSB(Tester.this);
                     if (rc != 0) {
@@ -104,12 +104,12 @@ public class Tester extends AppCompatActivity {
                     }
                 }
 
-                log("Established connection, starting test");
+                log("连接已建立，开始测试");
 
                 mainTest();
 
                 verboseLog = Backend.cEndLogs();
-                log("Hit the copy button to share the verbose log with devs.");
+                log("点击复制按钮复制详细日志。");
             }
         }).start();
     }
@@ -135,9 +135,9 @@ public class Tester extends AppCompatActivity {
 
     public void mainTest() {
         int rc = Backend.cFujiTestSuite();
-        log("Return code: " + rc);
+        log("返回码：" + rc);
         if (rc != 0) return;
-        log("Test completed.");
+        log("测试已完成。");
     }
 
     @Override
@@ -151,7 +151,7 @@ public class Tester extends AppCompatActivity {
                 ClipData clip = ClipData.newPlainText("Fudge log", verboseLog);
                 clipboard.setPrimaryClip(clip);
             } else {
-                Toast.makeText(this, "Test not completed yet", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "测试尚未完成", Toast.LENGTH_SHORT).show();
             }
         }
 

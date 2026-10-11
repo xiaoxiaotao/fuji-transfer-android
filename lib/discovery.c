@@ -526,6 +526,7 @@ static int try_connect_all_sockets(struct DiscoveryState *s, const char *local_i
 }
 
 static int state_idle(struct DiscoveryState *s, struct DiscoverInfo *info, const char *local_ip, void *arg) {
+	if (fuji_discovery_check_cancel(arg)) return FUJI_D_CANCELED;
 	if (s->pcss_fd != 0) {
 		if (send_pcss_datagram(s->pcss_fd, local_ip)) {
 			plat_dbg("Failed to send datagram: %d", errno);
@@ -562,6 +563,7 @@ static int state_idle(struct DiscoveryState *s, struct DiscoverInfo *info, const
 		return -1;
 	}
 
+	if (fuji_discovery_check_cancel(arg)) return FUJI_D_CANCELED;
 	if (s->reg_fd > 0) {
 		if (FD_ISSET(s->reg_fd, &fdset)) {
 			ptp_verbose_log("AutoSave register\n");
@@ -634,7 +636,7 @@ int fuji_discover_thread(struct DiscoverInfo *info, char *client_name, void *arg
 	}
 
 	if (rc == -1) {
-		app_print("Error connecting to camera."); // TODO: localize
+		app_print("局域网发现暂不可用，可继续使用蓝牙或相机 Wi-Fi 连接。");
 	}
 
 	close_all_sockets(&s);

@@ -1,394 +1,65 @@
-// Download the image, button for share and download
-// Copyright 2023 Daniel C - https://github.com/petabyt/fujiapp
-
 package dev.danielc.fujiapp;
-
-import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
+import android.content.*;
+import android.graphics.*;
 import android.net.Uri;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.StrictMode;
-import android.util.Log;
-import android.view.Gravity;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
-import android.widget.PopupWindow;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.media.MediaScannerConnection;
-
-import androidx.appcompat.app.ActionBar;
+import android.os.*;
+import android.view.*;
+import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
-
 import com.jsibbold.zoomage.ZoomageView;
-
 import org.json.JSONObject;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.ref.WeakReference;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.microedition.khronos.opengles.GL10;
-
-import dev.danielc.common.WiFiComm;
-
+/** Thumbnail first; full files stream to private disk and decode at screen resolution. */
 public class Viewer extends AppCompatActivity {
-    public static final String TAG = "viewer";
-    public Handler handler = null;
-    static WeakReference<PopupWindow> popupWindowInstance = null;
-
-    public Bitmap bitmap = null;
-    public String filename = null;
-    public byte[] fileByteData = null;
-    public boolean notEnoughMemoryToPreview = false;
-    public boolean fileIsDownloaded = false;
-    public boolean threadIsDone = false;
-
-    private static PopupWindow getPopup() {
-        if (popupWindowInstance == null) return null;
-        if (popupWindowInstance.get() == null) return null;
-        return popupWindowInstance.get();
-    }
-
-    static void notifyDownloadSpeed(int mbps) {
-        PopupWindow popupWindow = getPopup();
-        if (popupWindow == null) return;
-        View c = popupWindow.getContentView();
-        c.post(new Runnable() {
-            @Override
-            public void run() {
-                if (WiFiComm.isHandlingConflictingConnections()) {
-                    ((TextView)c.findViewById(R.id.download_warning_text)).setVisibility(View.VISIBLE);
-                    ((TextView)c.findViewById(R.id.download_warning_text)).setText(R.string.hint_disconnect_from_main_network);
-                }
-                ((TextView)c.findViewById(R.id.download_speed)).setText(String.format(Locale.US, "%dmbps", mbps));
-            }
-        });
-    }
-
-    static void notifyDownloadProgress(int percent) {
-        PopupWindow popupWindow = getPopup();
-        if (popupWindow == null) return;
-        View c = popupWindow.getContentView();
-        c.post(new Runnable() {
-            @Override
-            public void run() {
-                ((ProgressBar)c.findViewById(R.id.progress_bar)).setProgress(percent);
-            }
-        });
-    }
-
-    void fail(int code, String reason) {
-        Backend.reportError(code, reason);
-        finish();
-    }
-
-    // Create a popup - will set popupWindow, will be closed when finished
-    public void downloadPopup(Activity activity) {
-        LayoutInflater inflater = (LayoutInflater) activity.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-        View popupView = inflater.inflate(R.layout.popup_download, null);
-        PopupWindow popupWindow = new PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        popupWindow.showAtLocation(getWindow().getDecorView().getRootView(), Gravity.CENTER, 0, 0);
-        popupWindowInstance = new WeakReference<>(popupWindow);
-    }
-
-    // Notify gallery app that there is a new image
-    public void scanImage(String path) {
-        Log.d(TAG, "Notifying media scanner of " + path);
-        MediaScannerConnection.scanFile(this, new String[] {path}, null, null);
-    }
-
-    // Must be ran on UI thread
-    public void writeFile() {
-        if (fileByteData == null) return;
-        String path = Backend.getFilePath(filename);
-        File file = new File(path);
-        FileOutputStream fos = null;
-
-        try {
-            fos = new FileOutputStream(file);
-            fos.write(fileByteData);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            if (fos != null) {
-                try {
-                    fos.close();
-                    this.scanImage(path);
-                    Toast.makeText(Viewer.this, "Saved to " + filename, Toast.LENGTH_SHORT).show();
-                    fileIsDownloaded = true;
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    public void toast(String msg) {
-        if (handler == null) return;
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(Viewer.this, msg, Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
-    public void share() {
-        Intent intent = new Intent();
-        intent.setAction(Intent.ACTION_VIEW);
-        intent.setDataAndType(Uri.parse("file://" + Backend.getDownloads() + File.separator + filename), "image/jpeg");
-        this.startActivity(intent);
-    }
-
-    public void downloadAndShare() {
-        if (!fileIsDownloaded) {
-            writeFile();
-        }
-        share();
-    }
-
-    void downloadFileManually(int handle, int size) {
-        String saveDir = Backend.getDownloads();
-
-        String path = saveDir + File.separator + filename;
-        int rc = Backend.cFujiDownloadFile(handle, path);
-        if (rc != 0) {
-            fail(rc, "Failed to download file to storage.");
-        }
-
-        fileIsDownloaded = true;
-        scanImage(path);
-
-        toast("Saved to " + path);
-    }
-
-    ActionBar actionBar;
-    Thread thread = null;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        Gallery.pauseAll();
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_viewer);
-
-        actionBar = getSupportActionBar();
-        actionBar.setDisplayHomeAsUpEnabled(true);
-
-        // ???
-        StrictMode.VmPolicy.Builder builder = new StrictMode.VmPolicy.Builder();
-        StrictMode.setVmPolicy(builder.build());
-
-        // This activity must be called with object handle
-        Intent intent = getIntent();
-        int handle = intent.getIntExtra("handle", 0);
-
-        handler = new Handler(Looper.getMainLooper());
-
-        ViewTreeObserver viewTreeObserver = getWindow().getDecorView().getViewTreeObserver();
-        viewTreeObserver.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
-                getWindow().getDecorView().getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                downloadPopup(Viewer.this);
-                thread = new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        loadImage(handle);
-                    }
-                });
-                thread.start();
-            }
-        });
-    }
-
-    private void loadImage(int handle) {
-        try {
-            String t = Backend.cFujiBeginDownloadGetObjectInfo(handle);
-            if (t == null) {
-                fail(Backend.PTP_IO_ERR, "Failed to get object info");
-                return;
-            }
-            JSONObject jsonObject = new JSONObject(t);
-
-            if (Thread.interrupted()) { return; }
-
-            filename = jsonObject.getString("filename");
-            int size = jsonObject.getInt("compressedSize");
-            int imgX = jsonObject.getInt("imgWidth");
-            int imgY = jsonObject.getInt("imgHeight");
-
-            if (filename.endsWith(".MOV")) {
-                toast("MOV playback not supported yet");
-                threadIsDone = true;
-                return;
-            }
-
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    actionBar.setTitle(filename);
-                    TextView tv = findViewById(R.id.fileInfo);
-                    tv.setText(String.format(getString(R.string.filesize) + ": %.2fMB\n", size / 1024.0 / 1024.0));
-                    tv.append(String.format(getString(R.string.dimensions) + ": %dx%d\n", imgX, imgY));
-                }
-            });
-
-            try {
-                fileByteData = new byte[size];
-            } catch (OutOfMemoryError e) {
-                toast("Not enough memory to preview file");
-                notEnoughMemoryToPreview = true;
-                downloadFileManually(handle, size);
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        PopupWindow popupWindow = getPopup();
-                        if (popupWindow == null) return;
-                        popupWindow.dismiss();
-                        threadIsDone = true;
-                    }
-                });
-                return;
-            }
-
-            if (Thread.interrupted()) { return; }
-
-            int rc = Backend.cFujiGetFile(handle, fileByteData, size);
-            if (rc == Backend.PTP_CHECK_CODE) {
-                toast("Can't download this file");
-                finish();
-                threadIsDone = true;
-                return;
-            } else if (rc == Backend.PTP_CANCELED) {
-                toast("Canceled");
-                finish();
-                threadIsDone = true;
-                return;
-            } else if (rc != 0) {
-                fail(Backend.PTP_IO_ERR, "Failed to download image");
-                threadIsDone = true;
-                return;
-            }
-
-            if (Thread.interrupted()) { return; }
-
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            if (imgX > GL10.GL_MAX_TEXTURE_SIZE) {
-                Log.d("viewer", "Scaling image 2/2/2");
-                options.inSampleSize = 2;
-                options.inDensity = 2;
-                options.inTargetDensity = 2;
-                options.inScaled = true;
-            }
-//            if (size > 15000000) {
-//                Log.d("viewer", "Scaling image 8/8/4");
-//                options.inSampleSize = 8;
-//                options.inDensity = 8;
-//                options.inTargetDensity = 4;
-//                options.inScaled = true;
-//            }
-
-            if (Thread.interrupted()) { return; }
-
-            bitmap = BitmapFactory.decodeByteArray(fileByteData, 0, fileByteData.length, options);
-
-            // Resizing didn't go as expected, we need to scale the bitmap again
-            if (bitmap.getWidth() > GL10.GL_MAX_TEXTURE_SIZE) {
-                Log.d("viewer", "Image is still too large, downsizing");
-                float ratio = ((float) bitmap.getHeight()) / ((float) bitmap.getWidth());
-                Bitmap newBitmap = Bitmap.createScaledBitmap(bitmap, (int)(2048), (int)(2048 * ratio), false);
-                bitmap.recycle();
-                bitmap = newBitmap;
-            }
-
-            if (Thread.interrupted()) { return; }
-
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    PopupWindow popupWindow = getPopup();
-                    if (popupWindow == null) return;
-                    popupWindow.dismiss();
-                    ZoomageView zoomageView = findViewById(R.id.zoom_view);
-                    zoomageView.setImageBitmap(bitmap);
-                    threadIsDone = true;
-                }
-            });
-        } catch (Exception e) {
-            e.printStackTrace();
-            fail(Backend.PTP_IO_ERR, e.getMessage());
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        actionBar = null;
-        if (bitmap != null) {
-            bitmap.recycle();
-            bitmap = null;
-        }
-        PopupWindow popupWindow = getPopup();
-        if (popupWindow == null) return;
-        popupWindow.dismiss();
-        popupWindowInstance.clear();
-        Runtime.getRuntime().gc();
-        handler = null;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.action_download) {
-            if (notEnoughMemoryToPreview) {
-                toast(getString(R.string.alreadydownloaded));
-            } else {
-                if (!threadIsDone) return true;
-                writeFile();
-            }
-            return true;
-        } else if (id == R.id.action_share) {
-            if (notEnoughMemoryToPreview) {
-                share();
-            } else {
-                downloadAndShare();
-            }
-            return true;
-        } else if (id == android.R.id.home) {
-            thread.interrupt();
-            Gallery.resumeAll();
-            finish();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
-    @Override
-    public void onBackPressed() {
-        thread.interrupt();
-        Gallery.resumeAll();
-        super.onBackPressed();
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.viewer, menu);
-        return super.onCreateOptionsMenu(menu);
-    }
+ private static WeakReference<Viewer> instance;
+ private static final java.util.concurrent.atomic.AtomicInteger nativeOperations=new java.util.concurrent.atomic.AtomicInteger();
+ private final Handler ui=new Handler(Looper.getMainLooper());
+ private final AtomicBoolean busy=new AtomicBoolean();
+ private volatile boolean closed;
+ private volatile JSONObject info;
+ private String key,name;
+ private int handle;
+ private volatile Uri savedUri;
+ private Bitmap shown;
+ private final String session=Gallery.getInstance()==null?java.util.UUID.randomUUID().toString():Gallery.getInstance().downloadSession;
+ private final String camera=MySettings.photoCameraIdentity;
+ static boolean isOpen(){Viewer v=instance==null?null:instance.get();return nativeOperations.get()>0||(v!=null&&!v.closed);}
+ static void notifyDownloadSpeed(int kibps){Viewer v=instance==null?null:instance.get();if(v!=null&&!v.closed&&v.busy.get())v.ui.post(()->v.caption(String.format(Locale.CHINA,"正在传输 · %.1f MB/s",kibps/1024.0)));}
+ static void notifyDownloadProgress(int percent){Viewer v=instance==null?null:instance.get();if(v!=null&&!v.closed&&v.busy.get())v.ui.post(()->v.caption("正在读取原文件 · "+percent+"%"));}
+ @Override protected void onCreate(Bundle state){super.onCreate(state);setContentView(R.layout.activity_viewer);setSupportActionBar(findViewById(R.id.ui_toolbar));MainActivity.applyInsets(getWindow(),findViewById(R.id.viewer_root));getSupportActionBar().setDisplayHomeAsUpEnabled(true);instance=new WeakReference<>(this);handle=getIntent().getIntExtra("handle",0);findViewById(R.id.viewer_clear).setOnClickListener(v->operate(false,false));findViewById(R.id.viewer_save).setOnClickListener(v->operate(true,false));findViewById(R.id.viewer_share).setOnClickListener(v->shareAction());Gallery.pauseAll();busy.set(true);caption("正在读取预览…");nativeOperations.incrementAndGet();new Thread(this::loadThumbnail,"photo-preview").start();}
+ private void caption(String text){if(closed)return;((TextView)findViewById(R.id.fileInfo)).setText(text);updateControls();}
+ private void loadThumbnail(){try{String raw=Backend.cFujiBeginDownloadGetObjectInfo(handle);if(raw==null)throw new IOException("无法读取照片信息");info=new JSONObject(raw);name=new File(info.getString("filename").replace('\\','/')).getName();if(name.isEmpty()||name.equals(".")||name.equals(".."))throw new IOException("文件名无效");key=PhotoReceipts.key(camera==null?session:camera,handle,info);String cacheKey=key==null?session+":"+handle:key;byte[] thumb=PhotoDiskCache.thumb(this,cacheKey);if(thumb==null){thumb=Backend.cFujiGetThumb(handle);if(thumb!=null)PhotoDiskCache.thumb(this,cacheKey,thumb);}if(closed)return;Bitmap image=null;if(thumb!=null&&thumb.length>0){BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(thumb,0,thumb.length,options);options.inSampleSize=PreviewSizing.sample(options.outWidth,options.outHeight,1280);options.inJustDecodeBounds=false;image=BitmapFactory.decodeByteArray(thumb,0,thumb.length,options);}show(image,"缩略图预览 · 可加载清晰图或保存原文件");}
+ catch(Exception e){message("预览失败："+e.getMessage());}catch(OutOfMemoryError e){message("预览内存不足，仍可保存原文件");}finally{nativeOperations.decrementAndGet();busy.set(false);ui.post(this::updateControls);if(closed)Gallery.resumeAll();}}
+ private void show(Bitmap image,String note){ui.post(()->{if(closed){if(image!=null)image.recycle();return;}getSupportActionBar().setTitle(name);ZoomageView view=findViewById(R.id.zoom_view);Bitmap old=shown;if(image!=null){shown=image;view.setImageBitmap(image);}if(image!=null&&old!=null&&old!=image){view.post(()->old.recycle());}caption(String.format(Locale.CHINA,"%.1f MB · %s\n%s",info.optLong("compressedSize")/1048576.0,name,note));});}
+ private void message(String text){ui.post(()->{if(!closed){caption(text);Toast.makeText(this,text,Toast.LENGTH_LONG).show();}});}
+ private File original()throws IOException{
+  String cacheKey=key==null?session+":"+handle:key;
+  File file=PhotoDiskCache.file(this,"original:"+cacheKey,".original");long size=info.optLong("compressedSize");
+  if(file.isFile()&&size>0&&file.length()==size){file.setLastModified(System.currentTimeMillis());return file;}
+  File part=new File(file.getPath()+".part");try{int rc=Backend.cFujiDownloadFile(handle,part.getAbsolutePath());if(rc!=0)throw new IOException("读取原文件失败，错误码="+rc);if(!part.isFile()||part.length()==0)throw new IOException("原文件为空");if(size>0&&part.length()!=size)throw new IOException("文件大小不匹配，请重新读取");if(!part.renameTo(file))throw new IOException("无法完成文件缓存");PhotoDiskCache.trim(this,file);return file;}finally{part.delete();}
+ }
+ private Bitmap decode(File file){BitmapFactory.Options opt=new BitmapFactory.Options();opt.inJustDecodeBounds=true;BitmapFactory.decodeFile(file.getPath(),opt);int edge=Math.min(2560,Math.max(1280,getResources().getDisplayMetrics().heightPixels));opt.inSampleSize=PreviewSizing.sample(opt.outWidth,opt.outHeight,edge);opt.inJustDecodeBounds=false;return BitmapFactory.decodeFile(file.getPath(),opt);}
+ private void operate(boolean save,boolean share){
+  if(info==null||!busy.compareAndSet(false,true))return;
+  updateControls();if(save){saveWithService(share);return;}
+  Gallery.pauseAll();caption(save?"正在保存原文件…":"正在加载清晰图…");
+  nativeOperations.incrementAndGet();new Thread(()->{try{File file=original();Bitmap image=decode(file);show(image,image==null?"此格式无法生成清晰预览，可保存原文件":"清晰预览 · 原文件尚未保存到手机");}
+  catch(IOException|RuntimeException e){message(e.getMessage());}catch(OutOfMemoryError e){message("无法解码清晰图，原文件可直接保存");}finally{nativeOperations.decrementAndGet();busy.set(false);ui.post(this::updateControls);if(closed)Gallery.resumeAll();}},"photo-file-operation").start();
+ }
+ private void saveWithService(boolean share){
+  if(Build.VERSION.SDK_INT>=33&&!getSharedPreferences("transfer_preferences",0).getBoolean("notification_prompted",false)&&androidx.core.content.ContextCompat.checkSelfPermission(this,android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){getSharedPreferences("transfer_preferences",0).edit().putBoolean("notification_prompted",true).apply();androidx.core.app.ActivityCompat.requestPermissions(this,new String[]{android.Manifest.permission.POST_NOTIFICATIONS},1801);}
+  java.util.Map<Integer,Long> hints=new java.util.HashMap<>();hints.put(handle,info.optLong("compressedSize"));
+  try{DownloadTransfer.Run run=DownloadTransfer.start(this,session,camera,new int[]{handle},null,false,hints);caption("正在保存原文件…");ui.post(new Runnable(){public void run(){if(closed)return;if(run.running){caption(run.summary()+"\n"+(run.meter==null?"准备中":run.meter.detail()));ui.postDelayed(this,400);return;}busy.set(false);String target=run.targets.get(handle);if(target!=null){savedUri=target.startsWith("content:")?Uri.parse(target):Uri.fromFile(new File(target));caption(run.skipped>0?"原文件已经保存，已跳过重复下载":"原文件已保存到手机");if(share)shareSaved();}else caption("保存未完成："+(run.error.isEmpty()?"请在下载任务中查看详情":run.error));}});}
+  catch(RuntimeException e){busy.set(false);message("下载服务未能启动，请稍后重试");}
+ }
+ private void updateControls(){if(closed)return;boolean enabled=info!=null&&!busy.get();for(int id:new int[]{R.id.viewer_clear,R.id.viewer_save,R.id.viewer_share}){View view=findViewById(id);view.setEnabled(enabled);view.setAlpha(enabled?1f:0.4f);}((Button)findViewById(R.id.viewer_save)).setText(busy.get()?"处理中…":"保存原文件");}
+ private void shareAction(){if(busy.get()||info==null)return;if(savedUri!=null)shareSaved();else operate(true,true);}
+ private void shareSaved(){if(closed||savedUri==null)return;LocalMedia.share(this,savedUri,name);}
+ @Override public boolean onCreateOptionsMenu(Menu menu){getMenuInflater().inflate(R.menu.viewer,menu);return true;}
+ @Override public boolean onOptionsItemSelected(MenuItem item){if(item.getItemId()==android.R.id.home){finish();return true;}if(item.getItemId()==R.id.action_clear_preview){operate(false,false);return true;}if(item.getItemId()==R.id.action_download){operate(true,false);return true;}if(item.getItemId()==R.id.action_share){shareAction();return true;}return super.onOptionsItemSelected(item);}
+ @Override protected void onDestroy(){closed=true;ui.removeCallbacksAndMessages(null);if(instance!=null&&instance.get()==this)instance=null;if(shown!=null){((ZoomageView)findViewById(R.id.zoom_view)).setImageDrawable(null);shown.recycle();shown=null;}if(!busy.get())Gallery.resumeAll();super.onDestroy();}
 }

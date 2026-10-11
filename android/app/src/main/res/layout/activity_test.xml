@@ -43,7 +43,7 @@
             android:id="@+id/testerLog"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Logs go here" />
+            android:text="日志将在此处显示" />
     </ScrollView>
 
 </LinearLayout>

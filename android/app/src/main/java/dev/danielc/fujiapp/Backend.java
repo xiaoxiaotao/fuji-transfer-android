@@ -43,6 +43,7 @@ public class Backend extends Camlib {
     public static void reportError(int code, String reason) {
         if (Backend.cGetKillSwitch()) return;
         Log.d("fudge", reason);
+        Gallery.stopAll();
         cReportError(code, reason);
         discoveryThread(MainActivity.instance);
     }
@@ -58,12 +59,16 @@ public class Backend extends Camlib {
 
     /** Allocates initial memory */
     public native static void cInit();
+    public native static void cSetXAppHandoff(boolean enabled);
+    public native static void cSetWiFiProtocol(int mode);
 
     /** IO kill switch is in C/camlib, so we must set it when a connection is established */
     public native static boolean cGetKillSwitch();
     /** Get transport type (enum FujiTransport) */
     public native static int cGetTransport();
+    public native static String[] cGetCachedCameraInfo();
     /** Establish connection over USB-OTG */
+    public native static long[] cReadCameraParameters();
     public native static int cTryConnectUSB(Context appContext);
     /** establish connection over default wifi network */
     public native static int cTryConnectWiFi(int extraTmout);
@@ -73,6 +78,11 @@ public class Backend extends Camlib {
     public native static int cFujiSetup();
     /** Poll for events once */
     public native static int cPtpFujiPing();
+    public native static int cRemoteStart();
+    public native static byte[] cRemoteFrame();
+    public native static int cRemoteCapture();
+    public native static int cRemoteEnd();
+    public native static void cRemoteAbort();
     /** Gets a plain list of all object handles on the camera starting from 1 */
     public native static int[] cFujiGetObjectHandles();
     /** Setup and configure settings for image gallery (thumbnails, obj info) */
@@ -96,9 +106,19 @@ public class Backend extends Camlib {
 
     public native static View cFujiScriptsScreen(Context ctx);
 
-    static Thread discoveryThread = null;
+    static volatile Thread discoveryThread = null;
+    private static volatile boolean discoveryEnabled;
+    public static void startLanDiscovery(Context ctx) {
+        discoveryEnabled = true;
+        discoveryThread(ctx);
+    }
+    public static void suspendLanDiscovery() {
+        discoveryEnabled = false;
+        cancelDiscoveryThread();
+    }
     public static synchronized void discoveryThread(Context ctx) {
-        // Not the greatest thread safety here
+        if (!discoveryEnabled || ctx == null || BackgroundCamera.running || MainActivity.blockConnect || !cGetKillSwitch() || (MainActivity.wifi != null && MainActivity.wifi.isSelecting())) return;
+        // Only an explicit LAN discovery request enables automatic network restarts.
         if (discoveryThread != null) {
             Log.d("backend", "Discovery thread already running");
             return;
@@ -109,7 +129,7 @@ public class Backend extends Camlib {
             @Override
             public void run() {
                 Frontend.discoveryIsActive();
-                while (true) {
+                while (discoveryEnabled && !Thread.currentThread().isInterrupted()) {
                     long start_time = System.nanoTime();
                     int rc = Backend.cStartDiscovery(ctx);
                     if (rc < 0) break;
@@ -136,7 +156,7 @@ public class Backend extends Camlib {
         discoveryThread.start();
     }
     public native static int cStartDiscovery(Context ctx);
-    public static void cancelDiscoveryThread() {
+    public static synchronized void cancelDiscoveryThread() {
         if (discoveryThread != null) {
             discoveryThread.interrupt();
         }
@@ -144,7 +164,9 @@ public class Backend extends Camlib {
 
     // Return directory is guaranteed to exist
     public static String getDownloads() {
-        String mainStorage = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).getPath();
+        File root = android.os.Build.VERSION.SDK_INT >= 29 ? MainActivity.instance.getExternalFilesDir(Environment.DIRECTORY_PICTURES) : Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        if (root == null) root = new File(MainActivity.instance.getFilesDir(), "Pictures");
+        String mainStorage = root.getPath();
         String fujifilm = mainStorage + File.separator + "fudge";
         File directory = new File(fujifilm);
         if (!directory.exists()) {

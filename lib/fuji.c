@@ -11,6 +11,10 @@
 #include "fujiptp.h"
 #include "exif.h"
 #include "object.h"
+#include "xapp_index.h"
+#include "wifi_protocol.h"
+#include "xapp_probe.h"
+
 
 struct FujiDeviceKnowledge *fuji_get(struct PtpRuntime *r) {
 	return (struct FujiDeviceKnowledge *)r->userdata;
@@ -21,6 +25,7 @@ struct NetworkHandle *ptp_get_network_info(struct PtpRuntime *r) {
 }
 
 int fuji_reset_ptp(struct PtpRuntime *r) {
+    if (r->userdata) free(fuji_get(r)->xapp_handles);
 	ptp_reset(r);
 	if (r->userdata == NULL)
 		r->userdata = malloc(sizeof(struct FujiDeviceKnowledge));
@@ -64,18 +69,20 @@ void ptp_report_error(struct PtpRuntime *r, const char *reason, int code) {
 
 	if (reason == NULL) {
 		if (code == PTP_IO_ERR) {
-			app_print("Disconnected: IO Error");
+			app_print("连接已断开：通信错误");
 		} else {
-			app_print("Disconnected: Runtime error");
+			app_print("连接已断开：运行错误");
 		}
 	} else {
-		app_print("Disconnected: %s", reason);
+		app_print("连接已断开：%s", reason);
 	}
 }
 
 // New function to connect from struct instead of passing in IP/port/etc
 int fuji_connect_from_discoverinfo(struct PtpRuntime *r, struct DiscoverInfo *info) {
 	fuji_reset_ptp(r);
+    snprintf(fuji_get(r)->info_model, sizeof(fuji_get(r)->info_model), "%.*s", (int)sizeof(info->camera_model), info->camera_model);
+    snprintf(fuji_get(r)->info_name, sizeof(fuji_get(r)->info_name), "%.*s", (int)sizeof(info->camera_name), info->camera_name);
 	strncpy(fuji_get(r)->ip_address, info->camera_ip, 64);
 	strncpy(fuji_get(r)->autosave_client_name, info->client_name, 64);
 	fuji_get(r)->transport = info->transport;
@@ -107,10 +114,10 @@ int fuji_connection_entry(struct PtpRuntime *r) {
 		if (!rc && fuji_get(r)->camera_state == FUJI_MULTIPLE_TRANSFER) {
 			rc = fuji_download_classic(r);
 			if (rc) {
-				app_print("Error downloading images");
+				app_print("照片下载出错");
 				return rc;
 			}
-			app_print("Check your file manager app/gallery.");
+			app_print("请在文件管理器或相册中查看。");
 			ptp_report_error(r, "Disconnected", 0);
 		}
 
@@ -124,10 +131,9 @@ int fuji_connection_entry(struct PtpRuntime *r) {
 int fuji_setup(struct PtpRuntime *r) {
 	struct FujiDeviceKnowledge *fuji = fuji_get(r);
 
-	app_print("Waiting on the camera...");
-	app_print("Make sure you pressed OK.");
+	app_print(fuji->auto_protocol ? "正在建立相机协议连接…" : fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? "正在建立 XApp 协议连接…" : "请在相机上按 OK 确认连接。");
 
-	char *device_name = app_get_client_name();
+	char *device_name = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? strdup("Fudge-XE5") : app_get_client_name();
 
 	struct PtpFujiInitResp resp;
 	int rc = ptpip_fuji_init_req(r, device_name, &resp);
@@ -140,43 +146,70 @@ int fuji_setup(struct PtpRuntime *r) {
 
 	free(device_name);
 	if (rc) {
-		app_print("Failed to initialize connection");
+		app_print("连接初始化失败");
 		return rc;
 	}
-	app_print("Initialized connection.");
+	app_print("连接已初始化。");
 
+	snprintf(fuji->info_name, sizeof(fuji->info_name), "%.*s", (int)sizeof(resp.cam_name), resp.cam_name);
 	app_send_cam_name(resp.cam_name);
 
-	if (fuji->transport == FUJI_FEATURE_WIRELESS_COMM) {
-		app_print("The camera is thinking...");
+	if (fuji->transport == FUJI_FEATURE_WIRELESS_COMM || fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
+		app_print("相机正在处理…");
 		usleep(50000); // Fuji cameras require at least 50ms delay after init
 	}
 
-	rc = ptp_open_session(r);
+	app_print("正在打开 PTP 会话…");
+    if (fuji->auto_protocol || fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
+        // Match current libfuji: Fujifilm starts OpenSession at transaction 1.
+        r->session++;
+        r->transaction = 1;
+        struct PtpCommand open = {0};
+        open.code = PTP_OC_OpenSession;
+        open.params[0] = r->session;
+        open.param_length = 1;
+        app_print("XApp OpenSession：事务编号=1，会话编号=%d", r->session);
+        rc = ptp_send(r, &open);
+    } else {
+        rc = ptp_open_session(r);
+    }
+	if (rc) { char diagnostic[120]; snprintf(diagnostic, sizeof(diagnostic), "OpenSession 失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); app_print(diagnostic); }
 	if (rc == PTP_CHECK_CODE) {
 		if (ptp_get_return_code(r) != PTP_RC_SessionAlreadyOpened) {
 			return rc;
 		}
 	} else if (rc) {
-		app_print("Failed to open session.");
+		app_print("无法建立相机会话。");
 		return rc;
 	}
 
-	if (fuji->transport == FUJI_FEATURE_WIRELESS_TETHER) {
-		return 0;
-	}
+    if (fuji->auto_protocol) {
+        app_print("正在识别相机连接方式…");
+        int remote = -1, extended = -1;
+        rc = ptp_get_prop_value(r, PTP_DPC_FUJI_RemoteVersion);
+        if (!rc) remote = ptp_parse_prop_value(r);
+        else if (rc != PTP_CHECK_CODE || (ptp_get_return_code(r) != PTP_RC_DevicePropNotSupported && ptp_get_return_code(r) != PTP_RC_OperationNotSupported)) return rc;
+        if (remote >= 0x20007) {
+            rc = ptp_get_prop_value(r, 0xdf28);
+            if (!rc) extended = ptp_parse_prop_value(r);
+            else if (rc != PTP_CHECK_CODE || (ptp_get_return_code(r) != PTP_RC_DevicePropNotSupported && ptp_get_return_code(r) != PTP_RC_OperationNotSupported)) return rc;
+        }
+        fuji->transport = fuji_wifi_has_xapp(remote, extended) ? FUJI_FEATURE_XAPP_WIRELESS_COMM : FUJI_FEATURE_WIRELESS_COMM;
+        app_print("自动识别：远程版本=0x%x，扩展版本=0x%x，选择%s", remote, extended, fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? "XApp 图库" : "旧款无线通信");
+    }
+    if (fuji->transport == FUJI_FEATURE_WIRELESS_TETHER) return 0;
 
-	app_print("Press OK to allow access.");
-	rc = fuji_wait_for_access(r);
+    if (fuji->transport != FUJI_FEATURE_XAPP_WIRELESS_COMM) app_print("请在相机上按 OK 允许访问。");
+	rc = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? 0 : fuji_wait_for_access(r);
 	if (rc) {
-		app_print("Failed to get access to the camera.");
+		app_print("无法获得相机访问权限。");
 		return rc;
 	}
 
 	// Remote cams don't need to wait for access, so waiting for the 'OK'
 	// is done somewhere else
 	if (fuji->camera_state != FUJI_REMOTE_ACCESS) {
-		app_print("Your camera loves you.");
+		app_print("相机已接受连接。");
 	}
 
 	// NOTE: cFujiConfigInitMode *must* be called before fuji_config_version, or anything else.
@@ -184,7 +217,7 @@ int fuji_setup(struct PtpRuntime *r) {
 	rc = fuji_config_init_mode(r);
 	if (rc) {
 		ptp_verbose_log("fuji_config_init_mode: %d\n", rc);
-		app_print("Failed to setup the camera's mode");
+		app_print("无法设置相机模式");
 		return rc;
 	}
 
@@ -192,10 +225,10 @@ int fuji_setup(struct PtpRuntime *r) {
 		return 0;
 	}
 
-	app_print("Setting up image viewer");
-	rc = fuji_config_version(r);
+	app_print("正在初始化照片查看器");
+	rc = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? 0 : fuji_config_version(r);
 	if (rc) {
-		app_print("Failed to check versions.");
+		app_print("无法检查协议版本。");
 		return rc;
 	}
 
@@ -204,11 +237,11 @@ int fuji_setup(struct PtpRuntime *r) {
 		if (rc) return rc;
 	}
 
-	rc = fuji_config_device_info_routine(r);
+	rc = fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? 0 : fuji_config_device_info_routine(r);
 	if (rc) return rc;
 
 	// Setup remote mode
-	if (fuji->remote_version != -1 && fuji->camera_state == FUJI_REMOTE_ACCESS) {
+	if (fuji->remote_version != -1 && fuji->camera_state == FUJI_REMOTE_ACCESS && fuji->transport != FUJI_FEATURE_XAPP_WIRELESS_COMM) {
 		rc = fuji_setup_remote_mode(r);
 		if (rc) return rc;
 	}
@@ -219,10 +252,10 @@ int fuji_setup(struct PtpRuntime *r) {
 int fuji_setup_remote_mode(struct PtpRuntime *r) {
 	int rc = fuji_remote_mode_open_sockets(r);
 	if (rc) {
-		app_print("Failed to start remote mode");
+		app_print("无法启动遥控模式");
 		return rc;
 	} else {
-		app_print("Started remote mode.");
+		app_print("已进入遥控模式。");
 	}
 
 	rc = fuji_get_events(r);
@@ -238,10 +271,10 @@ int fuji_setup_remote_mode(struct PtpRuntime *r) {
 
 	rc = fuji_remote_mode_end(r);
 	if (rc) {
-		app_print("Failed to finish remote setup.");
+		app_print("遥控初始化失败。");
 		return rc;
 	} else {
-		app_print("Finished remote setup.");
+		app_print("遥控初始化完成。");
 	}
 
 	rc = fuji_get_events(r);
@@ -250,6 +283,8 @@ int fuji_setup_remote_mode(struct PtpRuntime *r) {
 	return 0;
 }
 
+
+static long get_ms(void);
 
 static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct PtpFujiInitResp *resp) {
 	struct FujiInitPacket *p = (struct FujiInitPacket *)r->data;
@@ -267,11 +302,30 @@ static int ptpip_fuji_init_req_(struct PtpRuntime *r, char *device_name, struct 
 
 	if (ptpip_cmd_write(r, r->data, (int)p->length) != (int)p->length) return PTP_IO_ERR;
 
-	// Read the packet size, then receive the rest
-	int x = ptpip_cmd_read(r, r->data, 4);
-	if (x < 0) return PTP_IO_ERR;
-	x = ptpip_cmd_read(r, r->data + 4, (int)p->length - 4);
-	if (x < 0) return PTP_IO_ERR;
+    // TCP may return a partial header/body or zero bytes on socket timeout.
+    memset(r->data, 0, 256);
+    unsigned int received = 0, required = 4;
+    long deadline = get_ms() + 15000000L;
+    while (received < required) {
+        int x = ptpip_cmd_read(r, r->data + received, required - received);
+        if (x < 0 || r->io_kill_switch || get_ms() >= deadline) {
+            app_print("PTP 握手响应读取失败或超时。"); return PTP_IO_ERR;
+        }
+        if (x == 0) { usleep(10000); continue; }
+        received += x;
+        if (received == 4 && required == 4) {
+            required = p->length;
+            if (required < 8 || required > 256) {
+                app_print("PTP 握手响应长度无效。"); return PTP_IO_ERR;
+            }
+        }
+    }
+    char handshake_info[100];
+    snprintf(handshake_info, sizeof(handshake_info), "PTP 握手响应：长度=%u，类型=%u", required, p->type);
+    app_print(handshake_info);
+    if (p->type != PTPIP_INIT_FAIL && (p->type != PTPIP_INIT_COMMAND_ACK || required < 26)) {
+        app_print("PTP 握手响应类型或长度不符合预期。"); return PTP_IO_ERR;
+    }
 
 	if (p->type == PTPIP_INIT_FAIL) {
 		ptp_verbose_log("PTPIP_INIT_FAIL\n");
@@ -397,9 +451,17 @@ int fuji_get_thumb(struct PtpRuntime *r, int handle, unsigned int *offset, unsig
 		return ptp_get_partial_exif(r, handle, offset, length);
 	} else {
 		// Patch for newer cameras. ptp_get_thumbnail blocks forever unless this is called.
-		if (fuji_get(r)->remote_version > 0x20006) {
+		if (fuji_get(r)->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM || fuji_get(r)->remote_version > 0x20006) {
 			struct PtpObjectInfo oi;
-			int rc = ptp_get_object_info(r, (int) handle, &oi);
+			if (handle <= 5) app_print("缩略图 #%d：先读取照片信息", handle);
+			int rc;
+            for (int attempt = 0; ; attempt++) {
+                rc = ptp_get_object_info(r, (int)handle, &oi);
+                if (rc != PTP_CHECK_CODE || ptp_get_return_code(r) != 0x2019 || attempt >= 4) break;
+                if (attempt == 0) app_print("照片 #%d：相机忙，等待后重试（最多 5 次）", handle);
+                usleep(250000 * (attempt + 1));
+            }
+			if (rc) app_print("照片信息 #%d 失败：rc=%d，响应=0x%x", handle, rc, ptp_get_return_code(r));
 			if (rc == PTP_CHECK_CODE) return 0;
 			if (rc) return rc;
 
@@ -407,7 +469,15 @@ int fuji_get_thumb(struct PtpRuntime *r, int handle, unsigned int *offset, unsig
 			ptp_object_service_set(r, r->oc, handle, &oi);
 		}
 
-		int rc = ptp_get_thumbnail(r, (int)handle);
+		if (handle <= 5) app_print("缩略图 #%d：请求 GetThumb", handle);
+		int rc;
+        for (int attempt = 0; ; attempt++) {
+            rc = ptp_get_thumbnail(r, (int)handle);
+            if (rc != PTP_CHECK_CODE || ptp_get_return_code(r) != 0x2019 || attempt >= 4) break;
+            if (attempt == 0) app_print("缩略图 #%d：相机忙，等待后重试", handle);
+            usleep(250000 * (attempt + 1));
+        }
+		if (rc) app_print("缩略图 #%d 失败：rc=%d，响应=0x%x", handle, rc, ptp_get_return_code(r));
 		if (rc == PTP_CHECK_CODE) {
 			ptp_verbose_log("Thumbnail get failed: %x\n", ptp_get_return_code(r));
 			return 0;
@@ -418,6 +488,7 @@ int fuji_get_thumb(struct PtpRuntime *r, int handle, unsigned int *offset, unsig
 		} else {
 			(*offset) = 0x0;
 			(*length) = ptp_get_payload_length(r);
+			if (handle <= 5) app_print("缩略图 #%d：收到 %u 字节", handle, *length);
 		}
 		return 0;
 	}
@@ -441,7 +512,10 @@ int fuji_end_file_download(struct PtpRuntime *r) {
 
 int fuji_begin_download_get_object_info(struct PtpRuntime *r, int handle, struct PtpObjectInfo *oi) {
 	int rc;
-	if (r->connection_type == PTP_IP_USB) {
+	if (fuji_get(r)->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
+        rc = ptp_set_prop_value16(r, 0xd226, 2);
+        if (rc) return rc;
+    } else if (r->connection_type == PTP_IP_USB) {
 		rc = fuji_begin_file_download(r);
 		if (rc) return rc;
 	}
@@ -475,7 +549,7 @@ static int fuji_tether_download(struct PtpRuntime *r) {
 		app_get_tether_file_path(buffer);
 		FILE *f = fopen(buffer, "wb");
 		if (f == NULL) return PTP_RUNTIME_ERR;
-		app_print("Downloading %s", buffer);
+		app_print("正在下载 %s", buffer);
 		ptp_download_object(r, (int)a->data[i], f, 0x100000);
 		fclose(f);
 
@@ -485,7 +559,7 @@ static int fuji_tether_download(struct PtpRuntime *r) {
 			ptp_delete_object(r, (int)a->data[i]);
 		}
 
-		app_print("Done downloading.");
+		app_print("下载完成。");
 	}
 
 	free(a);
@@ -604,7 +678,9 @@ int fuji_config_init_mode(struct PtpRuntime *r) {
 
 	// Determine preferred mode from state and version info
 	int mode = 0;
-	if (fuji->remote_version != -1 || fuji->camera_state == FUJI_REMOTE_ACCESS) {
+	if (fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
+        mode = 20; // XApp gallery mode, observed in libfuji
+    } else if (fuji->remote_version != -1 || fuji->camera_state == FUJI_REMOTE_ACCESS) {
 		mode = FUJI_REMOTE_MODE;
 	} else {
 		if (fuji->camera_state == FUJI_MULTIPLE_TRANSFER) {
@@ -730,8 +806,66 @@ int fuji_remote_mode_end(struct PtpRuntime *r) {
 	return 0;
 }
 
+// Adapted from petabyt/libfuji fuji_xapp_config_gallery (MIT).
+static int fuji_xapp_gallery(struct PtpRuntime *r) {
+    app_print("XApp 图库：读取版本 DF28");
+    int rc = ptp_get_prop_value(r, 0xdf28);
+    if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    int version = ptp_parse_prop_value(r);
+    app_print("XApp 图库：写入版本 DF28");
+    rc = ptp_set_prop_value(r, 0xdf28, version);
+    if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    app_print("XApp 图库：配置 D226");
+    rc = ptp_set_prop_value16(r, 0xd226, 0);
+    if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    app_print("XApp 图库：配置 D227");
+    rc = ptp_set_prop_value16(r, 0xd227, 0);
+    if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    struct PtpCommand cmd = {0};
+    app_print("XApp 图库：请求 9054");
+    cmd.code = 0x9054; cmd.param_length = 1; cmd.params[0] = 0x10000001;
+    rc = xapp_optional_object_probe(r, &cmd); if (rc) return rc;
+    app_print("XApp 图库：请求 9055");
+    cmd.code = 0x9055;
+    rc = xapp_optional_object_probe(r, &cmd); if (rc) return rc;
+    app_print("XApp 图库：请求 9050");
+    cmd.code = 0x9050; cmd.param_length = 0;
+    rc = ptp_send(r, &cmd); if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    app_print("XApp 图库：读取 D22B");
+    rc = ptp_get_prop_value(r, 0xd22b); if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    app_print("XApp 图库：请求照片索引 9053");
+    cmd.code = 0x9053; cmd.param_length = 2; cmd.params[0] = 0; cmd.params[1] = 30000;
+    rc = ptp_send(r, &cmd); if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    app_print("XApp 图库：读取照片数量 D620");
+    rc = ptp_get_prop_value(r, 0xd620); if (rc) { app_print("XApp 图库操作失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r)); return rc; }
+    int count = ptp_parse_prop_value(r);
+    if (count < 0 || count > 30000) return PTP_RUNTIME_ERR;
+    fuji_get(r)->num_objects = count;
+    app_print("XApp 图库：照片数量=%d，读取索引 D621", count);
+    rc = ptp_get_prop_value(r, 0xd621);
+    if (rc) app_print("照片索引读取失败：rc=%d，响应=0x%x", rc, ptp_get_return_code(r));
+    if (!rc) {
+        int size=ptp_get_payload_length(r);
+        const uint8_t *data=ptp_get_payload(r);
+        app_print("D621 索引：字节数=%d，声明数量=%u", size, size>=4?xapp_u32(data):0);
+        int *handles=count>0?malloc(sizeof(int)*count):NULL;
+        free(fuji_get(r)->xapp_handles); fuji_get(r)->xapp_handles=NULL;
+        if (handles && xapp_parse_index(data, size<0?0:(size_t)size, count, handles)) {
+            fuji_get(r)->xapp_handles=handles;
+            app_print("采用 D621 实际编号：首项=0x%x，末项=0x%x", handles[0], handles[count-1]);
+        } else {
+            free(handles);
+            app_print("D621 不符合 UINT32 编号数组格式，保留 libfuji 的顺序编号。");
+        }
+        app_print("相机状态=%d，远程协议=0x%x，对象协议=0x%x", fuji_get(r)->camera_state, fuji_get(r)->remote_version, fuji_get(r)->get_object_version);
+        app_print("照片索引就绪，等待相机准备缩略图…"); usleep(1000000);
+    }
+    return rc;
+}
+
 int fuji_config_image_viewer(struct PtpRuntime *r) {
 	struct FujiDeviceKnowledge *fuji = fuji_get(r);
+    if (fuji->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) return fuji_xapp_gallery(r);
 	if (r->connection_type == PTP_USB) return 0;
 	if (fuji->transport == FUJI_FEATURE_WIRELESS_TETHER) return 0;
 	plat_dbg("remote_image_view_version: %X", fuji->remote_image_view_version);
@@ -820,7 +954,7 @@ int fuji_import_objects(struct PtpRuntime *r, int *object_ids, int length, int m
 		rc = ptp_download_object(r, object_ids[i], f, 0x100000);
 		fclose(f);
 		if (rc) {
-			app_print("Failed to save %s: %s", oi->filename, ptp_perror(rc));
+			app_print("保存 %s 失败：%s", oi->filename, ptp_perror(rc));
 			return rc;
 		}
 
@@ -845,7 +979,7 @@ int fuji_download_file(struct PtpRuntime *r, int handle, int file_size, int (han
 
 	ptp_verbose_log("Going to download object #%d\n", handle);
 
-	rc = ptp_get_prop_value(r, PTP_DPC_FUJI_CompressionCutOff);
+	rc = fuji_get(r)->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM ? 0 : ptp_get_prop_value(r, PTP_DPC_FUJI_CompressionCutOff);
 	if (rc) return rc;
 
 	ptp_mutex_lock(r);
@@ -883,7 +1017,8 @@ int fuji_download_file(struct PtpRuntime *r, int handle, int file_size, int (han
 			goto end;
 		}
 
-		handle_add(arg, ptp_get_payload(r), (int)payload_size, read);
+        if (payload_size > (size_t)(file_size - read)) { rc = PTP_RUNTIME_ERR; goto end; }
+        if (handle_add(arg, ptp_get_payload(r), (int)payload_size, read)) { rc = PTP_RUNTIME_ERR; goto end; }
 
 		read += (int)payload_size;
 
@@ -895,8 +1030,12 @@ int fuji_download_file(struct PtpRuntime *r, int handle, int file_size, int (han
 		}
 	}
 
-	end:;
-	if (fuji_get(r)->transport == FUJI_FEATURE_WIRELESS_COMM) {
+    end:;
+    if (fuji_get(r)->transport == FUJI_FEATURE_XAPP_WIRELESS_COMM) {
+        int cleanup_rc = ptp_set_prop_value16(r, 0xd226, 2);
+        if (!rc) rc = cleanup_rc;
+    }
+    if (fuji_get(r)->transport == FUJI_FEATURE_WIRELESS_COMM) {
 		rc = fuji_get_events(r);
 		if (rc) {
 			ptp_mutex_unlock(r);
@@ -927,7 +1066,7 @@ int fuji_download_classic(struct PtpRuntime *r) {
 		rc = ptp_download_object(r, 1, f, 0x100000);
 		fclose(f);
 		if (rc) {
-			app_print("Failed to save %s: %s", oi.filename, ptp_perror(rc));
+			app_print("保存 %s 失败：%s", oi.filename, ptp_perror(rc));
 			return rc;
 		}
 
@@ -957,7 +1096,7 @@ int ptp_fuji_get_object_handles(struct PtpRuntime *r, struct PtpArray **a) {
 		struct PtpArray *list = malloc(sizeof(int) * fuji->num_objects + sizeof(struct PtpArray));
 		list->length = fuji->num_objects;
 		for (int i = 0; i < fuji->num_objects; i++) {
-			list->data[i] = i + 1;
+			list->data[i] = fuji->xapp_handles ? fuji->xapp_handles[i] : i + 1;
 		}
 		(*a) = list;
 	}

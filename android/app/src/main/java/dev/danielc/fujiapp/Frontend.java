@@ -18,13 +18,13 @@ import dev.danielc.common.WiFiComm;
 public class Frontend {
     public static String parseErr(int rc) {
         switch (rc) {
-            case Camlib.PTP_NO_DEVICE: return "No device found.";
-            case Camlib.PTP_NO_PERM: return "Invalid permissions.";
-            case Camlib.PTP_OPEN_FAIL: return "Couldn't connect to device.";
-            case WiFiComm.NOT_AVAILABLE: return "WiFi not ready yet.";
-            case WiFiComm.NOT_CONNECTED: return "WiFi is not connected. Wait a few seconds or check your settings.";
-            case WiFiComm.UNSUPPORTED_SDK: return "Unsupported SDK";
-            default: return "Unknown error";
+            case Camlib.PTP_NO_DEVICE: return "未找到设备。";
+            case Camlib.PTP_NO_PERM: return "没有访问权限。";
+            case Camlib.PTP_OPEN_FAIL: return "无法连接设备。";
+            case WiFiComm.NOT_AVAILABLE: return "Wi-Fi 尚未就绪。";
+            case WiFiComm.NOT_CONNECTED: return "尚未连接 Wi-Fi，请稍候或检查设置。";
+            case WiFiComm.UNSUPPORTED_SDK: return "不支持此系统版本";
+            default: return "未知错误";
         }
     }
 
@@ -81,7 +81,11 @@ public class Frontend {
         updateLog();
     }
 
-    public static void print(String arg) {
+    private static final StringBuilder connectionDiagnostic = new StringBuilder();
+    public static synchronized String getConnectionDiagnostic() { return connectionDiagnostic.toString(); }
+    public static synchronized void print(String arg) {
+        connectionDiagnostic.append(arg).append('\n');
+        if (connectionDiagnostic.length() > 32768) connectionDiagnostic.delete(0, connectionDiagnostic.length() - 32768);
         Log.d("fudge", arg);
 
         basicLog += arg + "\n";
@@ -100,7 +104,8 @@ public class Frontend {
 
     static void downloadedFile(String path) {
         Gallery.downloadedFile(path);
-        MediaScannerConnection.scanFile(MainActivity.instance, new String[] {path}, null, null);
+        try { PhotoStorage.publish(MainActivity.instance, path); }
+        catch (java.io.IOException | RuntimeException e) { print("保存到手机失败：" + e.getMessage()); }
     }
 
     public static void print(@StringRes int resID) {
@@ -115,7 +120,7 @@ public class Frontend {
     public static void sendCamName(String value) {
         Gallery.setTitleCamName(value);
     }
-    public static void notifyDownloadProgress(int percent) {Viewer.notifyDownloadProgress(percent);}
+    public static void notifyDownloadProgress(int percent) {Viewer.notifyDownloadProgress(percent);Gallery.notifyBatchProgress(percent);}
     public static void notifyDownloadSpeed(int mbps) {Viewer.notifyDownloadSpeed(mbps);}
     public static void onCameraRegistered(String model, String name, String ip) { MainActivity.instance.onCameraRegistered(model, name, ip); }
     public static void onCameraWantsToConnect(String model, String name) { MainActivity.instance.onCameraWantsToConnect(model, name); }

@@ -1,0 +1,17 @@
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/monitor_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/ui_background">
+ <androidx.appcompat.widget.Toolbar android:id="@+id/ui_toolbar" android:layout_width="0dp" android:layout_height="48dp" app:titleTextColor="@color/ui_text" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent"/>
+ <FrameLayout android:id="@+id/monitor_frame" android:layout_width="0dp" android:layout_height="0dp" android:background="#000000" app:layout_constraintTop_toBottomOf="@id/ui_toolbar" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/monitor_panel">
+  <ImageView android:id="@+id/monitor_image" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter" android:contentDescription="相机实时画面"/>
+  <dev.danielc.fujiapp.MonitorGrid android:id="@+id/monitor_grid" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone"/>
+  <TextView android:id="@+id/monitor_countdown" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:textSize="64sp" android:textColor="#FFFFFF" android:visibility="gone"/>
+  <TextView android:id="@+id/monitor_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:padding="24dp" android:text="正在准备取景连接…" android:textSize="14sp" android:textColor="@color/ui_muted"/>
+  <TextView android:id="@+id/monitor_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:layout_gravity="bottom" android:gravity="center_vertical" android:padding="8dp" android:background="#B3000000" android:text="实验功能 · 待真机验证" android:textSize="12sp" android:textColor="@color/ui_muted" android:maxLines="3" android:ellipsize="end"/>
+ </FrameLayout>
+ <LinearLayout android:id="@+id/monitor_panel" android:layout_width="128dp" android:layout_height="0dp" android:orientation="vertical" android:gravity="center_vertical" android:padding="8dp" app:layout_constraintTop_toBottomOf="@id/ui_toolbar" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent">
+
+  <Button android:id="@+id/monitor_options" style="@style/UiTextButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="辅助与自拍" android:textSize="13sp"/>
+  <Button android:id="@+id/monitor_capture" style="@style/GoButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="拍摄一张" android:enabled="false" android:textSize="13sp"/>
+  <Button android:id="@+id/monitor_retry" style="@style/UiTextButton" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" android:text="重试取景" android:enabled="false" android:textSize="13sp"/>
+  <Button android:id="@+id/monitor_diagnostic" style="@style/UiTextButton" android:layout_width="match_parent" android:layout_height="48dp" android:text="复制诊断" android:textSize="13sp"/>
+ </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

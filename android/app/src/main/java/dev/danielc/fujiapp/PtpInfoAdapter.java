@@ -59,10 +59,12 @@ public class PtpInfoAdapter extends BaseAdapter {
     class Queue extends Idler {
         @Override
         public boolean idle() {
+            if(stopDownloading||Backend.cGetKillSwitch())return true;
             int rc = Backend.cPtpObjectServiceStep();
+            if(stopDownloading)return true;
             if (rc < 0) {
                 stopRequestThread();
-                Backend.reportError(Backend.PTP_IO_ERR, "Failed to get object info");
+                Backend.reportError(Backend.PTP_IO_ERR, "无法获取照片信息");
             }
             if (rc > 0) {
                 JSONObject[] newList = Backend.cPtpObjectServiceGetFilled();

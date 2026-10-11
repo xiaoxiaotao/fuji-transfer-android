@@ -4,13 +4,14 @@
     <item
         android:id="@+id/action_download"
         android:icon="@drawable/baseline_download_24"
-        android:title=""
-        app:showAsAction="always" />
+        android:title="保存原文件"
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_share"
         android:icon="@drawable/baseline_share_24"
-        android:title=""
-        app:showAsAction="always" />
+        android:title="分享"
+        app:showAsAction="never" />
 
+    <item android:id="@+id/action_clear_preview" android:title="加载清晰图" app:showAsAction="never" />
 </menu>
