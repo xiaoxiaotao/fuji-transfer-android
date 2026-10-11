@@ -14,7 +14,7 @@ sources += ['../lib/fp/src/'+f+'.c' for f in ['d185','data','xml','ezxml']]
 sources += ['../lib/libpict/src/'+f+'.c' for f in ['operations','packet','enums','data','enum_dump','lib','canon','liveview','ml','conv','generic','transport','ip','bind','canon_adv','stuff','no_usb']]
 refs=[]; builds=[]
 for path in sources:
-    ref=add('ref:'+path, '{isa = PBXFileReference; lastKnownFileType = '+('sourcecode.swift' if path.endswith('.swift') else 'sourcecode.c')+'; path = '+q(path)+'; sourceTree = SOURCE_ROOT; }')
+    ref=add('ref:'+path, '{isa = PBXFileReference; lastKnownFileType = '+('sourcecode.swift' if path.endswith('.swift') else 'sourcecode.c.c')+'; path = '+q(path)+'; sourceTree = SOURCE_ROOT; }')
     refs.append(ref); builds.append(add('build:'+path,'{isa = PBXBuildFile; fileRef = '+ref+'; }'))
 asset=add('assets','{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = FujiGallery/Assets.xcassets; sourceTree = SOURCE_ROOT; }')
 privacy=add('privacy','{isa = PBXFileReference; lastKnownFileType = text.xml; path = FujiGallery/PrivacyInfo.xcprivacy; sourceTree = SOURCE_ROOT; }')
