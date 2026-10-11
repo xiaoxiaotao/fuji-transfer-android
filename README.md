@@ -1,17 +1,17 @@
 # Fuji图库 · Fuji Transfer Android
 
-**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.62-fuji-photo-cards`；下方公开测试 APK 仍为 zh.50。
+**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.62-fuji-photo-cards`。
 
 ## 下载 APK
 
-[直接下载 Fuji图库 zh.50 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/main/downloads/fudge-0.2.3-zh.50-transfer-progress-arm64.apk) · [版本说明与校验值](https://github.com/xiaoxiaotao/fuji-transfer-android/releases/tag/v0.2.3-zh.50-transfer-progress)
+[直接下载 Fuji图库 zh.62 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/main/downloads/FujiGallery-Android-zh.62-fuji-photo-cards-arm64.apk)
 
 适用于 Android 6.0 及以上的 arm64 设备。此安装包已在小米 10 Pro（Android 13）安装并启动，当前仍为测试版。请使用上方直接下载链接获取 `.apk`，源码压缩包不能直接安装。
 
 APK SHA-256：
 
 ```text
-36ec3a5003598368f284c479b9e6993332d96aeb4dbcfeef095b4173847bdccb
+cb3c0f8eabbef533282e1137c31da168d8d381c2c5fa56343f1d7c9439bfc1b3
 ```
 
 ## 当前功能
@@ -35,7 +35,7 @@ APK SHA-256：
 
 zh.43–zh.50 完善蓝牙识别、手动断开与重连、PTP 初始化恢复、连接状态提示及下载进度显示。zh.50 已在小米 10 Pro 覆盖安装，用户确认保存进度显示正常；zh.49 实机完成连接并读取 234 个文件的图库索引。其他相机、长时间后台传输和更广泛的系统兼容性仍需验证。
 
-详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 为 zh.50；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)已通过本地构建、Lint、84 项 Android 测试及用户真机功能验证，合并至 main。
+详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 已更新为 zh.62；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)已通过本地构建、Lint、84 项 Android 测试及用户真机功能验证，合并至 main。
 
 ## 构建
 
