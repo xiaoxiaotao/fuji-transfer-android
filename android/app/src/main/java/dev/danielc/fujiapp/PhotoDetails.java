@@ -10,7 +10,7 @@ import java.util.List;
 /** Reads only the downloaded original. Missing fields are never inferred from the preview. */
 final class PhotoDetails {
     final List<String> lines = new ArrayList<>();
-    String camera = "", exposure = "", lens="", aperture="", shutter="", iso="";
+    String camera = "", exposure = "", lens="", takenAt="", aperture="", shutter="", iso="";
     static PhotoDetails read(Context context, Uri uri, String name) throws IOException {
         PhotoDetails result = new PhotoDetails();
         result.lines.add("文件：" + name);
@@ -23,6 +23,7 @@ final class PhotoDetails {
             android.media.ExifInterface exif = new android.media.ExifInterface(fd.getFileDescriptor());
             result.camera = value(exif, "Model");
             String lens = value(exif, "LensModel"), time = value(exif, "DateTimeOriginal");
+            result.takenAt=time;
             String aperture = value(exif, "FNumber"), shutter = value(exif, "ExposureTime");
             shutter = shutter(shutter);result.lens=lens;result.aperture=aperture.isEmpty()?"":"f/"+aperture;result.shutter=shutter.isEmpty()?"":shutter+" s";
             String iso = value(exif, "PhotographicSensitivity");

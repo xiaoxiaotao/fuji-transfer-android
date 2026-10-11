@@ -21,7 +21,7 @@ import java.util.concurrent.Executors;
 /** Creation is available without initializing Bluetooth, Wi-Fi or the native camera session. */
 public final class FrameHome extends AppCompatActivity {
     private static final int PICK_PHOTO=501;
-    private static final int[][] GROUPS={{0,1},{3,6},{8,9,10},{2,4},{5,7}};
+    private static final int[][] GROUPS=PhotoFrame.GROUPS;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final List<Bitmap> samples=new ArrayList<>(), recentBitmaps=new ArrayList<>();
     private final List<ImageView> sampleViews=new ArrayList<>();
@@ -52,14 +52,16 @@ public final class FrameHome extends AppCompatActivity {
         banner=new ImageView(this);banner.setScaleType(ImageView.ScaleType.CENTER_CROP);hero.addView(banner,new FrameLayout.LayoutParams(-1,-1));
         View shade=new View(this);shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x10000000,0x44000000,0x70000000}));hero.addView(shade,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout wording=column();wording.setGravity(Gravity.CENTER);TextView heading=text("Fuji图库",29,0xffffffff);heading.setTypeface(null,Typeface.BOLD);heading.setLetterSpacing(.12f);heading.setGravity(Gravity.CENTER);wording.addView(heading);TextView subtitle=text("为你的照片，留下光影",13,0xffffffff);subtitle.setLetterSpacing(.10f);wording.addView(subtitle,spacing(-2,-2,8));hero.addView(wording,new FrameLayout.LayoutParams(-1,-1));
-        TextView mark=text("边框创作  /  富士传图",10,0xfff0f1ed);mark.setGravity(Gravity.CENTER);FrameLayout.LayoutParams mp=new FrameLayout.LayoutParams(-1,dp(28),Gravity.BOTTOM);mp.bottomMargin=dp(8);hero.addView(mark,mp);
+        TextView mark=text(PhotoFrame.NAMES.length+" 款边框  /  富士传图",10,0xfff0f1ed);mark.setGravity(Gravity.CENTER);FrameLayout.LayoutParams mp=new FrameLayout.LayoutParams(-1,dp(28),Gravity.BOTTOM);mp.bottomMargin=dp(8);hero.addView(mark,mp);
         hero.setContentDescription("从手机相册选图，开始边框创作");hero.setOnClickListener(v->{pendingStyle=8;pickPhoto();});content.addView(hero,spacing(-1,dp(192),0));
         LinearLayout sources=new LinearLayout(this);sources.setGravity(Gravity.CENTER_VERTICAL);sources.setBackground(surface(0xff292d31,10));sources.setPadding(dp(2),0,dp(2),0);
         String[] sourceTitles={"＋ 相册选图","▧ 本地照片","↗ 富士相机"};
         for(int i=0;i<3;i++){final int sourceIndex=i;Button action=button(sourceTitles[i],0x00000000,i==0?0xffd6ed00:0xffe1e3e4);action.setTextSize(12);action.setPadding(0,0,0,0);action.setMinimumWidth(0);action.setMinWidth(0);if(i==0)action.setId(R.id.creation_pick);sources.addView(action,new LinearLayout.LayoutParams(0,dp(42),1));action.setOnClickListener(v->{if(sourceIndex==0){pendingStyle=8;pickPhoto();}else if(sourceIndex==1)pickImported(8);else WorkbenchNav.open(this,WorkbenchNav.CAMERA);});}content.addView(sources,spacing(-1,-2,12));
-        String[] names={"水印边框","印象边框","背景模糊","白边边框","胶片与电影"},badges={"热门","经典","热门","简约","风格"};
+        final View[] anchors=new View[GROUPS.length];HorizontalScrollView categoryScroll=new HorizontalScrollView(this);categoryScroll.setHorizontalScrollBarEnabled(false);LinearLayout categoryRow=new LinearLayout(this);categoryScroll.addView(categoryRow);content.addView(categoryScroll,spacing(-1,-2,16));
+        for(int i=0;i<GROUPS.length;i++){final int category=i;Button chip=button(PhotoFrame.CATEGORIES[i],0xff303539,0xffe1e3e4);chip.setTextSize(12);chip.setMinHeight(0);chip.setMinimumHeight(0);chip.setPadding(dp(10),0,dp(10),0);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(96),dp(38));cp.setMarginEnd(dp(8));categoryRow.addView(chip,cp);chip.setOnClickListener(v->{if(anchors[category]!=null)((android.widget.ScrollView)findViewById(R.id.creation_scroll)).smoothScrollTo(0,anchors[category].getTop()-dp(12));});}
+        String[] names=PhotoFrame.CATEGORIES;
         for(int group=0;group<GROUPS.length;group++){
-            final int initialStyle=GROUPS[group][0];LinearLayout section=section(names[group],badges[group],24);
+            final int initialStyle=GROUPS[group][0];LinearLayout section=section(names[group],GROUPS[group].length+" 款",24);anchors[group]=section;
             ImageButton upload=new ImageButton(this);upload.setImageResource(R.drawable.ui_upload);upload.setColorFilter(0xffdddddd);upload.setBackgroundColor(0x00000000);upload.setContentDescription("选择照片制作"+names[group]);section.addView(upload,new LinearLayout.LayoutParams(dp(40),dp(40)));upload.setOnClickListener(v->{pendingStyle=initialStyle;pickPhoto();});
             HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setClipToPadding(false);LinearLayout row=new LinearLayout(this);scroll.addView(row);content.addView(scroll,spacing(-1,-2,10));
             for(int style:GROUPS[group]){
@@ -114,7 +116,7 @@ public final class FrameHome extends AppCompatActivity {
             for(String asset:assets)try(InputStream in=getAssets().open(asset)){BitmapFactory.Options decode=new BitmapFactory.Options();decode.inSampleSize=4;Bitmap photo=BitmapFactory.decodeStream(in,null,decode);if(photo!=null)photos.add(photo);}
             if(photos.isEmpty())return;
             PhotoDetails details=new PhotoDetails();
-            for(int i=0;i<sampleStyles.size();i++){PhotoFrame.Options options=new PhotoFrame.Options();options.style=sampleStyles.get(i);options.parameters=false;options.title="Photography";options.paper=options.style==1?2:1;rendered.add(PhotoFrame.render(photos.get(i%photos.size()),details,options));}
+            for(int i=0;i<sampleStyles.size();i++){PhotoFrame.Options options=new PhotoFrame.Options();options.style=sampleStyles.get(i);options.parameters=false;options.title="Photography";options.paper=PhotoFrame.defaultPaper(options.style);List<Bitmap> exampleExtras=new ArrayList<>();for(int j=1;j<6;j++)exampleExtras.add(photos.get((i+j)%photos.size()));rendered.add(PhotoFrame.render(photos.get(i%photos.size()),details,options,exampleExtras));}
         }catch(Exception|OutOfMemoryError e){android.util.Log.w("frame-home","Template samples unavailable",e);}
         runOnUiThread(()->{if(closed){for(Bitmap bitmap:photos)bitmap.recycle();for(Bitmap bitmap:rendered)bitmap.recycle();return;}samples.addAll(photos);samples.addAll(rendered);if(photos.size()>1)banner.setImageBitmap(photos.get(1));for(int i=0;i<rendered.size()&&i<sampleViews.size();i++)sampleViews.get(i).setImageBitmap(rendered.get(i));});
     });}
