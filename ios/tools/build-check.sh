@@ -11,7 +11,7 @@ else
   while IFS= read -r line; do
     line="${line//%/%25}"
     printf '::error::%s\n' "$line"
-  done < <(awk '/error:|fatal error:|BUILD FAILED/ {print}' "$output/xcodebuild.log" | head -25)
+  done < <(awk '/: error:|fatal error:|BUILD FAILED/ {print}' "$output/xcodebuild.log" | head -25)
   tail -30 "$output/xcodebuild.log"
   exit 1
 fi
