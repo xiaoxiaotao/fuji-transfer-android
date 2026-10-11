@@ -2,6 +2,7 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
 
 
+    <cache-path name="frame_shares" path="frames/"/>
     <external-files-path name="photos" path="Pictures/fudge/"/>
 
 

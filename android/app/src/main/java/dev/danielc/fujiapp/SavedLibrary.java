@@ -25,5 +25,11 @@ final class SavedLibrary extends SQLiteOpenHelper {
   imported=true;
  }
  List<Photo> list(){List<Photo> photos=new ArrayList<>();try(Cursor c=getReadableDatabase().rawQuery("SELECT * FROM photos ORDER BY saved DESC, _id DESC",null)){while(c.moveToNext())photos.add(new Photo(c.getLong(0),c.getString(1),c.getString(2),c.getLong(3),c.getLong(4)));}return photos;}
+ // A document picker and MediaStore can point to the same physical photo.
+ static String sourceKey(Uri uri){
+  if("com.android.providers.media.documents".equals(uri.getAuthority()))try{String id=android.provider.DocumentsContract.getDocumentId(uri);if(id.startsWith("image:"))return "media-image:"+id.substring(6);}catch(IllegalArgumentException ignored){}
+  if("media".equals(uri.getAuthority())){java.util.List<String> path=uri.getPathSegments();if(path.size()==4&&(path.get(0).equals("external")||path.get(0).equals("external_primary"))&&path.get(1).equals("images")&&path.get(2).equals("media"))return "media-image:"+path.get(3);}
+  return uri.toString();
+ }
  boolean exists(Photo photo){try{if("file".equals(photo.uri().getScheme()))return new File(photo.uri().getPath()).isFile();try(Cursor c=context.getContentResolver().query(photo.uri(),new String[]{android.provider.MediaStore.MediaColumns.SIZE},null,null,null)){return c!=null&&c.moveToFirst();}}catch(Exception e){return false;}}
 }

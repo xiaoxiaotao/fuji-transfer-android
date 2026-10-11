@@ -108,6 +108,27 @@ public final class FujiBluetooth {
             if(adapter!=null)for(BluetoothDevice device:adapter.getBondedDevices())if(fujiName(device.getName()))addCamera(device,device.getName(),true);
         }catch(SecurityException ignored){}
     }
+    void reconnectSaved(){
+        if(standby||closed||busy||!MainActivity.beginUserConnection())return;
+        if(MainActivity.blockConnect||!Backend.cGetKillSwitch()||(MainActivity.wifi!=null&&MainActivity.wifi.isSelecting()))return;
+        ConnectionState.shared.begin(ConnectionState.Mode.BLUETOOTH);
+        String address=MySettings.getSetting(context,"background_camera","");
+        if(!BluetoothAdapter.checkBluetoothAddress(address)){start();return;}
+        List<String> required=new ArrayList<>();
+        if(Build.VERSION.SDK_INT>=31){required.add(Manifest.permission.BLUETOOTH_CONNECT);required.add(Manifest.permission.BLUETOOTH_SCAN);}
+        if(Build.VERSION.SDK_INT>=33)required.add(Manifest.permission.NEARBY_WIFI_DEVICES);
+        else {required.add(Manifest.permission.ACCESS_FINE_LOCATION);required.add(Manifest.permission.ACCESS_COARSE_LOCATION);}
+        List<String> missing=new ArrayList<>();for(String permission:required)if(ContextCompat.checkSelfPermission(context,permission)!=PackageManager.PERMISSION_GRANTED)missing.add(permission);
+        if(!missing.isEmpty()){ConnectionState.shared.error(ConnectionState.Step.BLUETOOTH,"请授权附近设备，然后再次点击快捷重连");ActivityCompat.requestPermissions(activity,missing.toArray(new String[0]),91);status("请授权附近设备，然后再次点击快捷重连");return;}
+        try{
+            BluetoothManager manager=(BluetoothManager)context.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter=manager==null?null:manager.getAdapter();
+            if(adapter==null||!adapter.isEnabled()){ConnectionState.shared.error(ConnectionState.Step.BLUETOOTH,"请先开启手机蓝牙");status("请先开启手机蓝牙");return;}
+            BluetoothDevice device=adapter.getRemoteDevice(address);
+            if(device.getBondState()!=BluetoothDevice.BOND_BONDED){status("已保存相机的系统配对已失效，请重新搜索并配对");start();return;}
+            stopScan();pair(device);
+        }catch(SecurityException|IllegalArgumentException failure){ConnectionState.shared.error(ConnectionState.Step.BLUETOOTH,"无法重连，请检查附近设备权限并重新搜索相机");status("无法重连，请检查附近设备权限并重新搜索相机");}
+    }
     boolean isConnected(){return connected;}
     void connectPaired(String address){
         if(!standby||closed||busy||connected)return;
@@ -400,6 +421,7 @@ public final class FujiBluetooth {
                 }
                 write(PAIR,NAME,"Fudge-XE5".getBytes(StandardCharsets.UTF_8));
                 MySettings.setSetting(context,"background_camera",device.getAddress());
+                MySettings.setSetting(context,"saved_camera_name",device.getName()==null?"富士相机":device.getName());
                 if(!standby)MySettings.photoCameraIdentity=PhotoReceipts.hash(device.getAddress());
                 String[][] subscriptions={{CONF,"a68e3f66-0fcc-4395-8d4c-aa980b5877fa"},{CONF,"bd17ba04-b76b-4892-a545-b73ba1f74dae"},{CONF,"f9150137-5d40-4801-a8dc-f7fc5b01da50"},{CONF,"ad06c7b7-f41a-46f4-a29a-712055319122"},{"804daa8e-ffeb-4ab3-8e75-6edd7303208d","7170fd5a-56d9-4c19-b043-7a7047d8e1a0"},{NET,SSID},{NET,"75823784-fbb7-4b71-abae-cd9a34072e3c"},{CONF,"e6692c5c-b7cd-44f4-95fc-eda07ce32560"},{NET,"aab609c4-94dd-4d89-bc60-665d5090b828"},{NET,"2a125640-706d-4dd1-b420-c0f4ab93c361"},{NET,"82a9f452-c5ce-4ef5-8203-3fc9a47f8171"},{NET,"deef7187-3f43-4364-9e22-11a8c8a15951"},{NET,"c95d91ae-b247-4d6d-8661-7dd5d6a0f85b"}};
                 status("订阅相机状态…");for(String[] item:subscriptions){BluetoothGattService s=gatt.getService(UUID.fromString(item[0]));if(s!=null&&s.getCharacteristic(UUID.fromString(item[1]))!=null)subscribe(item[0],item[1]);}

@@ -31,6 +31,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <queries>
+        <intent><action android:name="android.provider.action.PICK_IMAGES"/><data android:mimeType="image/*"/></intent>
+        <intent><action android:name="android.intent.action.PICK"/><data android:scheme="content" android:mimeType="image/*"/></intent>
+    </queries>
+
     <application
         android:name=".FujiApplication"
         android:allowBackup="true"
@@ -42,9 +47,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FujiWifiApp"
         tools:targetApi="35">
+        <activity android:name=".FrameHome" android:exported="true" android:theme="@style/Theme.FujiWifiApp.NoActionBar">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
         <activity
             android:name=".FileGallery" android:theme="@style/Theme.FujiWifiApp.NoActionBar"
             android:exported="false" />
+        <activity android:name=".PhotoStudio" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
         <activity android:name=".LocalViewer" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
         <activity
             android:name=".Help"
@@ -82,10 +91,6 @@
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
 
