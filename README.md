@@ -1,6 +1,6 @@
 # Fuji图库 · Fuji Transfer Android
 
-**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.60-editorial-frames`；下方公开测试 APK 仍为 zh.50。
+**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.61-frame-collections`；下方公开测试 APK 仍为 zh.50。
 
 ## 下载 APK
 
@@ -162,3 +162,12 @@ Mi 10 Pro（Android 13）实测，旧版 zh.58 与新版均冷启动，预热 4 
 新增撕边相纸、胶带手账、相册角贴、金线装裱、建筑蓝图、横线笔记、棋盘相纸、霓虹夜景、展览海报、典藏编号，总计 68 款。参考 [Canva 的照片边框类型](https://www.canva.com/features/photo-borders/)和 [Adobe Express 的边框功能](https://www.adobe.com/express/feature/design/borders)，使用项目原创 Canvas 布局，无需联网下载模板或外部图片资源。模板追加编号，原有 58 款和偏好保持兼容；仍沿用按需缩略图、有限缓存和后台预览。新增模板位于印象装裱、胶片相纸、旅行出版、色彩创意分类。
 
 构建、Android Lint、116 项测试通过，全部模板覆盖横/竖/方图、照片颜色不被装饰透明度改变以及预览/导出比例。实际 Canvas 总览导出为 FujiGallery-zh60-catalog.png。Mi 10 Pro 已覆盖安装，首页确认 68 款与分类数量。
+
+
+### zh.61：模板收藏与最近使用
+
+首页新增全部模板、收藏、最近使用筛选。模板卡提供独立星标，收藏操作不触发选图，点击成品图仍直接打开系统相册。编辑器可以收藏/取消收藏当前边框，并在模板分类条末尾查看收藏和最近使用。两个页面共享持久存储；收藏按最近收藏排序，最近使用按最新使用排序、去重、最多 12 款，仅在照片预览成功后记录。空列表提供引导，保持原有分类、模板编号和按需缩略图。
+
+构建、Android Lint 和 119 项测试通过，新增测试验证收藏持久化、稳定 ID、去重上限与损坏记录兼容。Mi 10 Pro 实测收藏、杀进程重启保留、收藏模板直接选图、编辑器取消收藏同步到首页、预览成功计入最近。8 次首页纵向滑动记录 357 帧、1 卡顿帧（0.28%），中位数 9ms、P95 10ms、慢图片上传 0 次；本次应用进程日志未发现 FATAL EXCEPTION。这是单台设备的检查，不代表所有场景的性能保证。
+
+本版完成创作功能方案第一阶段；独立草稿与批量套框尚未实现。
