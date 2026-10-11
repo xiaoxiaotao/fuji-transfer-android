@@ -1,0 +1,47 @@
+package dev.danielc.fujiapp;
+
+import android.content.Context;
+import android.net.Uri;
+import android.os.Build;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Reads only the downloaded original. Missing fields are never inferred from the preview. */
+final class PhotoDetails {
+    final List<String> lines = new ArrayList<>();
+    String camera = "", exposure = "";
+    static PhotoDetails read(Context context, Uri uri, String name) throws IOException {
+        PhotoDetails result = new PhotoDetails();
+        result.lines.add("文件：" + name);
+        if (Build.VERSION.SDK_INT < 24) {
+            result.lines.add("此系统版本暂不支持读取拍摄参数");
+            return result;
+        }
+        try (android.os.ParcelFileDescriptor fd = context.getContentResolver().openFileDescriptor(uri, "r")) {
+            if (fd == null) throw new IOException("无法打开照片");
+            android.media.ExifInterface exif = new android.media.ExifInterface(fd.getFileDescriptor());
+            result.camera = value(exif, "Model");
+            String lens = value(exif, "LensModel"), time = value(exif, "DateTimeOriginal");
+            String aperture = value(exif, "FNumber"), shutter = value(exif, "ExposureTime");
+            String iso = value(exif, "PhotographicSensitivity");
+            if (iso.isEmpty()) iso = value(exif, "ISOSpeedRatings");
+            add(result, "相机", result.camera); add(result, "镜头", lens); add(result, "拍摄时间", time);
+            add(result, "光圈", aperture.isEmpty() ? "" : "f/" + aperture);
+            add(result, "快门", shutter.isEmpty() ? "" : shutter + " s"); add(result, "ISO", iso);
+            add(result, "焦距", value(exif, "FocalLength"));
+            add(result, "尺寸", value(exif, "ImageWidth") + " × " + value(exif, "ImageLength"));
+            result.exposure = (aperture.isEmpty() ? "" : "f/" + aperture + "  ")
+                + (shutter.isEmpty() ? "" : shutter + "s  ") + (iso.isEmpty() ? "" : "ISO " + iso);
+            result.lines.add("胶片模拟 / 配方：暂未解析富士 MakerNote");
+        }
+        return result;
+    }
+    private static String value(android.media.ExifInterface exif, String tag) {
+        String text = exif.getAttribute(tag); return text == null ? "" : text.trim();
+    }
+    private static void add(PhotoDetails result, String label, String text) {
+        if (!text.isEmpty() && !text.equals(" × ")) result.lines.add(label + "：" + text);
+    }
+    String text() { return android.text.TextUtils.join("\n", lines); }
+}

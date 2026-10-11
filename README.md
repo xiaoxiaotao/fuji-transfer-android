@@ -76,3 +76,9 @@ sh tests/run-ptp-init-recovery.sh
 保留上游 GPL v2 许可文本与原作者版权，参见 [LICENSE](LICENSE)。依赖各自许可保留于原目录。部分协议适配参考 MIT 许可的 petabyt/libfuji，说明位于 [third_party/notices](third_party/notices)。本项目为社区开发应用，与富士官方无隶属关系。
 
 不提交 SDK、Gradle 缓存、设备日志、个人照片、Wi-Fi 密码和签名密钥。`downloads/` 仅保存明确发布、已签名并验证的安装包；其他构建产物不提交。
+
+### Android 照片详情与边框（zh.52）
+
+在手机图库打开已保存照片，点击“详情 / 边框”；相机预览页菜单也提供入口，需要先保存原文件。可读取相机、镜头、光圈、快门、ISO、焦距、日期和尺寸，缺失参数不推测。富士 MakerNote 胶片模拟与配方尚未解析。
+
+支持白色参数边框、深色参数边框和简洁白边，预览后可保存副本或通过系统分享。导出为 JPEG，照片最长边不超过 2048 像素（边框另计），不修改原文件，不携带 GPS 或原图 EXIF。RAW 等无法解码的格式会提示使用 JPEG。Android 6–8 保存需存储权限；拍摄参数读取需要 Android 7 或更新版本。
