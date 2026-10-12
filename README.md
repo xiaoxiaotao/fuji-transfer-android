@@ -1,10 +1,10 @@
 # Fuji图库 · Fuji Transfer Android
 
-**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.64-batch-frames`。
+**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.65-fuji-recipes`。
 
 ## 下载 APK
 
-[直接下载 Fuji图库 zh.63 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/main/downloads/FujiGallery-Android-zh.63-creation-drafts-arm64.apk)
+[直接下载 Fuji图库 zh.63 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/codex/android/downloads/FujiGallery-Android-zh.63-creation-drafts-arm64.apk)
 
 适用于 Android 6.0 及以上的 arm64 设备。此安装包已在小米 10 Pro（Android 13）安装并启动，当前仍为测试版。请使用上方直接下载链接获取 `.apk`，源码压缩包不能直接安装。
 
@@ -198,3 +198,13 @@ Mi 10 Pro（Android 13）实测，旧版 zh.58 与新版均冷启动，预热 4 
 任务保存在独立 AtomicFile 记录中，成功项记录输出位置。开始/继续只处理待保存项；重试失败只处理失败项；取消在当前照片完成后停止后续照片，已成功作品保留。首页“批量出片任务”可继续最近任务或选择历史任务。应用进程内串行处理，一次只保留一张原图及其成品；系统结束进程后，重新打开任务可以继续，当前未引入保证锁屏持续工作的前台服务。Android 10+ 使用固定任务输出名称查找已发布成品，以降低保存后、写记录前进程中断造成的重复导出。
 
 构建、Android Lint 与 133 项测试通过，覆盖输入去重/上限、单图限制、设置快照、任务持久化、成功项不重导出、真实编码导出、失败保留、仅重试失败和取消后待处理项保留。Mi 10 Pro 已覆盖安装，实查设置、系统多选、成品预览、3 张实际保存成功、杀进程后恢复完成记录。本次应用进程日志无 FATAL EXCEPTION。详见 [批量出片说明](docs/BATCH_FRAMES_ZH64.md)。
+
+
+### zh.65：个人富士配方本
+
+用 REA 6.4.0 实际采集 Fuji X Weekly / FujiStyle 公开页面，并执行机型筛选，形成 [调研证据与功能说明](docs/REA_FUJI_RESEARCH_ZH65.md)。借鉴其配方组织流程，新增自己的离线配方本：C1–C7、模拟、白平衡与偏移、动态范围和 JPEG 参数、笔记、来源；支持搜索、收藏、编辑、删除和参数文字分享。
+
+配方可以直接选照片制作配方签，也可从编辑器选配方带入手动备注，与草稿及批量套框衔接。字段均为用户手动记录，不是自动识别、后期滤镜或已写入相机；不打包竞品配方或图片。保存失败保留编辑表单；配方与草稿增加跨实例读写保护。当前没有配方样片封面和机型兼容数据库。
+
+
+zh.65 验证：构建、Android Lint 与 140 项测试通过。新增配方测试覆盖独立记录、搜索收藏、备注长度和手动来源、字段校验；界面流程测试覆盖空名称/无效槽位阻止保存、保存成功后才关闭表单、配方选择返回备注和选图取消清理。已覆盖安装 Mi 10 Pro；手机锁屏，本轮未完成完整真机交互验收。

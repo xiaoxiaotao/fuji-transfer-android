@@ -36,7 +36,7 @@ public final class FrameHome extends AppCompatActivity {
     private final List<Button> collectionTabs=new ArrayList<>();
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener draftListener=(prefs,key)->loadDrafts();
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener collectionListener=(prefs,key)->refreshCollections();
-    private int pendingStyle=8, generation;
+    private int pendingStyle=8, generation;private String pendingFilmNote="";
     private volatile boolean closed;
 
     private int dp(int value){return WorkbenchNav.dp(this,value);}
@@ -49,7 +49,7 @@ public final class FrameHome extends AppCompatActivity {
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);setContentView(R.layout.frame_home);
         MainActivity.applyInsets(getWindow(),findViewById(R.id.creation_root));WorkbenchNav.attach(this,WorkbenchNav.CREATE);
-        pendingStyle=state==null?8:state.getInt("pending_style",8);
+        pendingStyle=state==null?8:state.getInt("pending_style",8);pendingFilmNote=state==null?"":state.getString("pending_recipe_note","");
         content=findViewById(R.id.creation_content);collections=new FrameCollection(this);
         LinearLayout header=findViewById(R.id.creation_header);
         TextView emblem=text("F",22,0xff191c20);emblem.setTypeface(null,Typeface.BOLD);emblem.setGravity(Gravity.CENTER);emblem.setBackground(surface(0xfff4f5f7,32));header.addView(emblem,new LinearLayout.LayoutParams(dp(36),dp(36)));
@@ -68,7 +68,7 @@ public final class FrameHome extends AppCompatActivity {
         String[] modes={"全部模板","★ 收藏","最近使用","富士拍摄卡"};for(int i=0;i<modes.length;i++){final int mode=i;Button tab=button(modes[i],0xff303539,0xffe1e3e4);tab.setTextSize(12);collectionTabs.add(tab);collectionBar.addView(tab,new LinearLayout.LayoutParams(0,dp(42),1));tab.setOnClickListener(v->{collectionMode=mode;refreshCollections();});}
         collectionNote=text("",12,0xffb5b8ba);content.addView(collectionNote,spacing(-1,-2,12));
         androidx.recyclerview.widget.RecyclerView collectionList=templateList();collectionAdapter=new FrameSamples(new int[0]);collectionList.setAdapter(collectionAdapter);content.addView(collectionList,spacing(-1,dp(172),10));collectionList.setTag("personal_templates");
-        Button batchTasks=button("批量出片任务  ↗",0xff292d31,0xffd6ed00);content.addView(batchTasks,spacing(-1,dp(42),12));batchTasks.setOnClickListener(v->startActivity(new Intent(this,FrameBatchActivity.class)));section("继续创作","草稿",20);draftList=column();content.addView(draftList,spacing(-1,-2,8));
+        Button batchTasks=button("批量出片任务  ↗",0xff292d31,0xffd6ed00);LinearLayout tools=new LinearLayout(this);Button recipes=button("我的富士配方",0xff292d31,0xffd6ed00);tools.addView(recipes,new LinearLayout.LayoutParams(0,dp(44),1));tools.addView(batchTasks,new LinearLayout.LayoutParams(0,dp(44),1));content.addView(tools,spacing(-1,-2,12));recipes.setOnClickListener(v->startActivity(new Intent(this,FujiRecipeBook.class)));batchTasks.setOnClickListener(v->startActivity(new Intent(this,FrameBatchActivity.class)));section("继续创作","草稿",20);draftList=column();content.addView(draftList,spacing(-1,-2,8));
         final View[] anchors=new View[GROUPS.length];HorizontalScrollView categoryScroll=new HorizontalScrollView(this);categoryScroll.setHorizontalScrollBarEnabled(false);LinearLayout categoryRow=new LinearLayout(this);categoryScroll.addView(categoryRow);content.addView(categoryScroll,spacing(-1,-2,16));allTemplates.add(categoryScroll);
         for(int i=0;i<GROUPS.length;i++){final int category=i;Button chip=button(PhotoFrame.CATEGORIES[i],0xff303539,0xffe1e3e4);chip.setTextSize(12);chip.setMinHeight(0);chip.setMinimumHeight(0);chip.setPadding(dp(10),0,dp(10),0);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(96),dp(38));cp.setMarginEnd(dp(8));categoryRow.addView(chip,cp);chip.setOnClickListener(v->{if(anchors[category]!=null)((android.widget.ScrollView)findViewById(R.id.creation_scroll)).smoothScrollTo(0,anchors[category].getTop()-dp(12));});}
         String[] names=PhotoFrame.CATEGORIES;
@@ -83,7 +83,7 @@ public final class FrameHome extends AppCompatActivity {
         getSharedPreferences(FrameDrafts.UPDATES,0).registerOnSharedPreferenceChangeListener(draftListener);getSharedPreferences(FrameCollection.STORE,0).registerOnSharedPreferenceChangeListener(collectionListener);refreshCollections();loadSamples();handleImportIntent();
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleImportIntent();}
-    private void handleImportIntent(){if(getIntent().getBooleanExtra("pick_photo",false)){getIntent().removeExtra("pick_photo");pendingStyle=8;pickPhoto();}}
+    private void handleImportIntent(){if(getIntent().getBooleanExtra("pick_photo",false)){getIntent().removeExtra("pick_photo");pendingStyle=getIntent().getIntExtra("frame_style",8);pendingFilmNote=getIntent().getStringExtra("recipe_note");if(pendingFilmNote==null)pendingFilmNote="";getIntent().removeExtra("recipe_note");getIntent().removeExtra("frame_style");pickPhoto();}}
     private LinearLayout section(String title,String badge,int top){
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
         TextView label=text(title,20,0xffe4e5e6);label.setTypeface(null,Typeface.BOLD);row.addView(label);
@@ -94,8 +94,8 @@ public final class FrameHome extends AppCompatActivity {
     private void pickPhoto(){try{startActivityForResult(PhotoPicker.create(this,1),PICK_PHOTO);}catch(android.content.ActivityNotFoundException e){Toast.makeText(this,"系统相册不可用，请使用已导入照片",Toast.LENGTH_LONG).show();}}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request!=PICK_PHOTO||result!=RESULT_OK||data==null||data.getData()==null)return;
-        final Uri uri=data.getData();final int style=pendingStyle;
+        if(request!=PICK_PHOTO)return;if(result!=RESULT_OK||data==null||data.getData()==null){pendingFilmNote="";return;}
+        final Uri uri=data.getData();final int style=pendingStyle;final String recipeNote=pendingFilmNote;pendingFilmNote="";
         boolean retained=false;
         try{
             getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);retained=true;
@@ -112,7 +112,7 @@ public final class FrameHome extends AppCompatActivity {
             }catch(RuntimeException ignored){}
             if(persist)try{SavedLibrary library=SavedLibrary.get(this);boolean known=false;String key=SavedLibrary.sourceKey(uri);for(SavedLibrary.Photo stored:library.list())if(key.equals(SavedLibrary.sourceKey(stored.uri()))){known=true;break;}if(!known)library.record(uri.toString(),name,size,System.currentTimeMillis());}catch(RuntimeException e){android.util.Log.w("frame-home","Could not index selected photo",e);}
             final String title=name;
-            runOnUiThread(()->{if(!closed){PhotoStudio.open(this,uri,title,style);loadRecent();}});
+            runOnUiThread(()->{if(!closed){if(recipeNote.isEmpty())PhotoStudio.open(this,uri,title,style);else startActivity(new Intent(this,PhotoStudio.class).putExtra("target",uri.toString()).putExtra("name",title).putExtra("style",style).putExtra("film_note",recipeNote));loadRecent();}});
         });
     }
     private final class FrameSamples extends androidx.recyclerview.widget.RecyclerView.Adapter<SampleCell>{
@@ -133,7 +133,7 @@ public final class FrameHome extends AppCompatActivity {
     private void loadSamples(){worker.execute(()->{Bitmap image=null;try(InputStream in=getAssets().open("studio/coast.png")){BitmapFactory.Options decode=new BitmapFactory.Options();decode.inSampleSize=2;image=BitmapFactory.decodeStream(in,null,decode);if(image!=null)image.prepareToDraw();}catch(Exception|OutOfMemoryError error){android.util.Log.w("frame-home","Banner unavailable",error);}final Bitmap result=image;runOnUiThread(()->{if(closed){if(result!=null)result.recycle();return;}if(result!=null){samples.add(result);banner.setImageBitmap(result);}});});}
     @Override protected void onResume(){super.onResume();refreshCollections();loadDrafts();loadRecent();}
     private void loadRecent(){final int request=++generation;worker.execute(()->{List<SavedLibrary.Photo> photos=new ArrayList<>();List<Bitmap> images=new ArrayList<>();try{SavedLibrary library=SavedLibrary.get(this);library.importPrevious();java.util.Set<String> seen=new java.util.HashSet<>();for(SavedLibrary.Photo photo:library.list()){if(closed)break;if(photo.kind()==1&&seen.add(SavedLibrary.sourceKey(photo.uri()))&&library.exists(photo)){photos.add(photo);images.add(LocalMedia.thumbnail(this,photo));if(photos.size()==3)break;}}}catch(Exception e){android.util.Log.w("frame-home","Recent photos unavailable",e);}runOnUiThread(()->{if(closed||request!=generation){for(Bitmap bitmap:images)if(bitmap!=null)bitmap.recycle();return;}recent.removeAllViews();for(Bitmap bitmap:recentBitmaps)bitmap.recycle();recentBitmaps.clear();recentNote.setText(photos.isEmpty()?"还没有导入照片，可以直接从手机相册开始。":"点选照片，直接进入边框创作");for(int i=0;i<photos.size();i++){SavedLibrary.Photo photo=photos.get(i);Bitmap bitmap=images.get(i);LinearLayout tile=column();ImageView view=new ImageView(this);view.setScaleType(ImageView.ScaleType.CENTER_CROP);view.setImageResource(R.drawable.baseline_landscape_24);if(bitmap!=null){view.setImageBitmap(bitmap);recentBitmaps.add(bitmap);}tile.addView(view,new LinearLayout.LayoutParams(-1,dp(84)));TextView name=text(photo.name.startsWith("Fuji-frame-")?"边框作品":photo.name,10,0xffadbdb3);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);tile.addView(name,spacing(-1,-2,8));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMarginEnd(dp(8));recent.addView(tile,lp);tile.setContentDescription(photo.name.startsWith("Fuji-frame-")?"查看边框作品":"用 "+photo.name+" 制作边框");tile.setOnClickListener(v->{if(photo.name.startsWith("Fuji-frame-"))startActivity(new Intent(this,LocalViewer.class).putExtra("target",photo.target).putExtra("name",photo.name));else PhotoStudio.open(this,photo.uri(),photo.name);});}});});}
-    @Override protected void onSaveInstanceState(Bundle state){state.putInt("pending_style",pendingStyle);super.onSaveInstanceState(state);}
+    @Override protected void onSaveInstanceState(Bundle state){state.putInt("pending_style",pendingStyle);state.putString("pending_recipe_note",pendingFilmNote);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){moveTaskToBack(true);}
     @Override protected void onDestroy(){closed=true;getSharedPreferences(FrameDrafts.UPDATES,0).unregisterOnSharedPreferenceChangeListener(draftListener);getSharedPreferences(FrameCollection.STORE,0).unregisterOnSharedPreferenceChangeListener(collectionListener);worker.shutdownNow();imports.shutdownNow();banner.setImageDrawable(null);recent.removeAllViews();for(Bitmap bitmap:samples)bitmap.recycle();for(Bitmap bitmap:recentBitmaps)bitmap.recycle();super.onDestroy();}
 }

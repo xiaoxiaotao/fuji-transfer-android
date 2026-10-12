@@ -53,4 +53,7 @@ public class FrameHomeTest {
   Intent importing=new Intent().putExtra("pick_photo",true);ActivityController<FrameHome> controller=Robolectric.buildActivity(FrameHome.class,importing).create();FrameHome home=controller.get();
   assertNotNull(Shadows.shadowOf(home).getNextStartedActivityForResult());assertFalse(home.getIntent().hasExtra("pick_photo"));controller.destroy();activity.finish();
  }
+ @Test public void recipeLaunchKeepsNoteAndStyleDuringPickerAndClearsOnCancel(){
+  Intent intent=new Intent().putExtra("pick_photo",true).putExtra("frame_style",70).putExtra("recipe_note","My look / Classic Chrome");ActivityController<FrameHome> controller=Robolectric.buildActivity(FrameHome.class,intent).create();FrameHome home=controller.get();assertNotNull(Shadows.shadowOf(home).getNextStartedActivityForResult());Bundle state=new Bundle();home.onSaveInstanceState(state);assertEquals(70,state.getInt("pending_style"));assertEquals("My look / Classic Chrome",state.getString("pending_recipe_note"));assertFalse(home.getIntent().hasExtra("pick_photo"));home.onActivityResult(501,Activity.RESULT_CANCELED,null);Bundle cancelled=new Bundle();home.onSaveInstanceState(cancelled);assertEquals("",cancelled.getString("pending_recipe_note"));controller.destroy();
+ }
 }

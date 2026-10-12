@@ -53,6 +53,7 @@
         <activity
             android:name=".FileGallery" android:theme="@style/Theme.FujiWifiApp.NoActionBar"
             android:exported="false" />
+        <activity android:name=".FujiRecipeBook" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
         <activity android:name=".FrameBatchActivity" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
         <activity android:name=".PhotoStudio" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
         <activity android:name=".LocalViewer" android:exported="false" android:theme="@style/Theme.FujiWifiApp.NoActionBar"/>
