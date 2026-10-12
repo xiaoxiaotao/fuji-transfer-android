@@ -15,8 +15,8 @@ android {
         applicationId "dev.danielc.fujiapp"
         minSdk 23
         targetSdk 35
-        versionCode 74
-        versionName "0.2.3-zh.62-fuji-photo-cards"
+        versionCode 75
+        versionName "0.2.3-zh.63-creation-drafts"
     }
 
     buildTypes {
