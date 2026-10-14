@@ -15,8 +15,8 @@ android {
         applicationId "dev.danielc.fujiapp"
         minSdk 23
         targetSdk 35
-        versionCode 79
-        versionName "0.2.3-zh.67-photo-settings"
+        versionCode 80
+        versionName "0.2.3-zh.68-recipe-workspace"
     }
 
     buildTypes {

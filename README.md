@@ -1,17 +1,17 @@
 # Fuji图库 · Fuji Transfer Android
 
-**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.67-photo-settings`。
+**Fuji图库**是以照片边框创作与作品分享为核心的 Android 应用，支持从手机相册选图，附带富士相机连接与原图导入。连接与传图部分基于 [petabyt/fudge-legacy-android](https://github.com/petabyt/fudge-legacy-android) 开发。当前 Android 开发分支版本：`0.2.3-zh.68-recipe-workspace`。
 
 ## 下载 APK
 
-[直接下载 Fuji图库 zh.63 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/codex/android/downloads/FujiGallery-Android-zh.63-creation-drafts-arm64.apk)
+[直接下载 Fuji图库 zh.68 测试版（arm64-v8a）](https://github.com/xiaoxiaotao/fuji-transfer-android/raw/refs/heads/codex/android/downloads/FujiGallery-Android-zh.68-recipe-workspace-arm64.apk)
 
-适用于 Android 6.0 及以上的 arm64 设备。此安装包已在小米 10 Pro（Android 13）安装并启动，当前仍为测试版。请使用上方直接下载链接获取 `.apk`，源码压缩包不能直接安装。
+适用于 Android 6.0 及以上的 arm64 设备。zh.68 前一轮界面已在小米 10 Pro（Android 13）安装检查；当前 APK 包含随后通过自动化检查的全页配方编辑，尚未完成完整真机验收，仍为测试版。请使用上方直接下载链接获取 `.apk`，源码压缩包不能直接安装。
 
 APK SHA-256：
 
 ```text
-51cd4e5279dda8758de9329b65726375816733d21ccc34bcfb3c834f8e658da0
+be1d85e671db33d0e1ce24028a7e33f8ca90010f23a5bbbb3aa6181854dbd83b
 ```
 
 ## 当前功能
@@ -35,7 +35,7 @@ APK SHA-256：
 
 zh.43–zh.50 完善蓝牙识别、手动断开与重连、PTP 初始化恢复、连接状态提示及下载进度显示。zh.50 已在小米 10 Pro 覆盖安装，用户确认保存进度显示正常；zh.49 实机完成连接并读取 234 个文件的图库索引。其他相机、长时间后台传输和更广泛的系统兼容性仍需验证。
 
-详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 已更新为 zh.63；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)已通过本地构建、Lint、84 项 Android 测试及用户真机功能验证，合并至 main。
+详细记录见 [更新日志](docs/CHANGELOG.md)、[连接状态](docs/CONNECTION_STATUS_ZH48.md)、[名称、图标与日志设置](docs/FUJI_GALLERY_ZH49.md)和[进度显示修复](docs/TRANSFER_PROGRESS_ZH50.md)。上方公开 APK 已更新为 zh.68；zh.51 的[未完成下载恢复](docs/DOWNLOAD_RECOVERY_ZH51.md)已通过本地构建、Lint、84 项 Android 测试及用户真机功能验证，合并至 main。
 
 ## 构建
 
@@ -227,3 +227,11 @@ zh.65 真机补验（2026-10-12）：小米 14 / Android 16 验证保存、收�
 从编辑器保存原图配方前，先展示模拟、相机与镜头、分组参数和缺失字段说明，确认后再带入配方编辑。配方本增加镜头字段，读取来源及手动编辑标记继续保留。当前仍是本地配方，不写相机、不发布网络内容。
 
 构建、Lint 和 156 项测试通过；Mi 10 Pro 实测 DSCF2130.JPG 显示 `17-40mm F1.8 DC | Art 025`、Velvia、相机档位 R0/B0，确认页可进入预填表单，镜头保留。测试表单取消，测试草稿清理，已有照片和草稿保留。非零缩放已通过纯 Java 回归测试，竞品黑盒受控副本对照为 R40/B-60 → R+2/B-3。
+
+### zh.68：相框与富士配方分区（暂停开发快照）
+
+底部导航改为「相框 / 配方 / 照片 / 相机 / 我的」，配方不再是相框首页上的附属入口。独立配方工作区包含原图识别、我的配方 / 收藏、样片卡片、分组参数详情、语义图标和独立全页编辑；常用参数可选择档位与枚举，保留手动输入与原图来源。支持为配方选择自己的样片，缩略图后台解码并缓存；未保存编辑在页面重建时恢复。
+
+构建、Android Lint 与 158 项测试通过。真机已检查五项导航、相框首页移除配方入口、独立配方首页，以及前一轮图标编辑界面。最新全页编辑与完整识别/样片/保存链路仍待真机验收。
+
+2026-10-14 按用户要求暂停开发并推送当前代码与 APK。**已知未修复：系统相册选图时找不到全部图像**，用户已确认发生在系统选图界面，并非应用「照片」页；本次未改动 PhotoPicker，后续继续排查相册提供方、目录和兼容选择入口。
