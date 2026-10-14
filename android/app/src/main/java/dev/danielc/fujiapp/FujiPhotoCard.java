@@ -18,8 +18,9 @@ final class FujiPhotoCard {
   p.setColor(accent);p.setStrokeWidth(Math.max(1,u));c.drawLine(m,y+97*u,width-m,y+97*u,p);
   String cameraLens=d.lens.isEmpty()?d.camera:d.camera.isEmpty()?d.lens:d.camera+"  /  "+d.lens;
   if(o.parameters){text(c,p,cameraLens,m,y+135*u,w,19,u,muted,false);if(o.style==68){String[] labels={"APERTURE","SHUTTER","ISO"},values={d.aperture,d.shutter,d.iso};for(int i=0;i<3;i++){float x=m+w*i/3f;text(c,p,labels[i],x,y+165*u,w/3f-12*u,11,u,muted,true);text(c,p,values[i],x,y+195*u,w/3f-12*u,25,u,ink,false);}}else text(c,p,d.exposure,m,y+183*u,w,27,u,ink,false);text(c,p,join(d.focalLength,d.takenAt),m,y+223*u,w,17,u,muted,false);}
-  if(o.style==70){p.setColor(dark?0xff2d4038:0xffe3e9dd);c.drawRoundRect(m,y+248*u,width-m,y+330*u,12*u,12*u,p);}
-  if(!o.filmNote.trim().isEmpty()){text(c,p,"MY NOTE / 手动备注",m,y+275*u,w,13,u,accent,true);text(c,p,o.filmNote.trim(),m,y+313*u,w,27,u,ink,false);}
+  if(o.parameters&&!d.fuji.film().isEmpty())text(c,p,"FILM / 原图识别 · "+d.fuji.film(),m,y+260*u,w,20,u,accent,false);
+  if(o.style==70&&!o.filmNote.trim().isEmpty()){p.setColor(dark?0xff2d4038:0xffe3e9dd);c.drawRoundRect(m,y+279*u,width-m,y+346*u,12*u,12*u,p);}
+  if(!o.filmNote.trim().isEmpty()){text(c,p,"MY NOTE / 手动备注",m,y+300*u,w,13,u,accent,true);text(c,p,o.filmNote.trim(),m,y+334*u,w,27,u,ink,false);}
   text(c,p,o.author.trim(),m,y+365*u,w*.70f,19,u,muted,false);text(c,p,"FUJI GALLERY",m+w*.75f,y+365*u,w*.25f,14,u,accent,true);
   return out;
  }

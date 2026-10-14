@@ -9,6 +9,7 @@ import java.util.List;
 
 /** Reads only the downloaded original. Missing fields are never inferred from the preview. */
 final class PhotoDetails {
+    FujiMakerNote fuji = new FujiMakerNote();
     final List<String> lines = new ArrayList<>();
     String camera = "", exposure = "", lens="", takenAt="", aperture="", shutter="", iso="", focalLength="";
     static PhotoDetails read(Context context, Uri uri, String name) throws IOException {
@@ -35,8 +36,22 @@ final class PhotoDetails {
             add(result, "尺寸", value(exif, "ImageWidth") + " × " + value(exif, "ImageLength"));
             result.exposure = (aperture.isEmpty() ? "" : "f/" + aperture + "  ")
                 + (shutter.isEmpty() ? "" : shutter + "s  ") + (iso.isEmpty() ? "" : "ISO " + iso);
-            result.lines.add("胶片模拟 / 配方：暂未解析富士 MakerNote");
         }
+        try (java.io.InputStream stream = context.getContentResolver().openInputStream(uri)) {
+            result.fuji = FujiMakerNote.read(stream);
+        } catch (IOException error) {
+            android.util.Log.w("fuji-metadata", "Cannot read MakerNote", error);
+        }
+        result.fuji.applyCameraScale(result.camera);
+        if(result.lens.isEmpty()&&!result.fuji.lens.isEmpty()){result.lens=result.fuji.lens;add(result,"镜头",result.lens);}
+        result.lines.add(result.fuji.film().isEmpty() ? "胶片模拟：无法识别（未保留富士参数或数值暂未支持）" : "胶片模拟（原图识别）：" + result.fuji.film());
+        for (int i=0;i<FujiRecipes.KEYS.length;i++) {
+            String setting=result.fuji.settings.get(FujiRecipes.KEYS[i]);
+            if (setting!=null && !FujiRecipes.KEYS[i].equals("simulation")) result.lines.add(FujiRecipes.LABELS[i]+"（原图）："+setting);
+        }
+        for(String unknown:result.fuji.unknown) result.lines.add("未识别参数："+unknown);
+        result.lines.add("原图参数不包含自定义配方名称或 C1–C7 槽位；无法据此确认某个网络配方。");
+        android.util.Log.i("fuji-metadata", "MakerNote present="+result.fuji.present+", film="+result.fuji.film()+", fields="+result.fuji.settings.size());
         return result;
     }
     static String focalLength(String raw){if(raw.isEmpty())return "";try{double value;if(raw.contains("/")){String[] parts=raw.split("/");value=Double.parseDouble(parts[0])/Double.parseDouble(parts[1]);}else value=Double.parseDouble(raw);if(!Double.isFinite(value)||value<=0)return "";return String.format(java.util.Locale.ROOT,"%.1f",value).replaceAll("\\.0$", "")+" mm";}catch(RuntimeException error){return "";}}
